@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card } from '../../components/Layout';
 import { MapPin, Navigation, Clock, Route as RouteIcon, RefreshCw, Truck } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, Circle } from 'react-leaflet';
-import { apiService } from '../../services/apiservice';
+import { apiService, getCurrentUser } from '../../services/apiservice';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -56,14 +56,19 @@ const OriginIcon = L.divIcon({
     popupAnchor: [0, -10]
 });
 
-// --- Helper Component to Move Map ---
-function FlyToLocation({ center }: { center: [number, number] | null }) {
+// --- Helper Component to Move Map (ONCE per vehicle selection) ---
+function FlyToLocation({ center, vehicleId }: { center: [number, number] | null; vehicleId: number | null }) {
   const map = useMap();
+  const lastFlyToRef = useRef<number | null>(null);
+  
   useEffect(() => {
-    if (center) {
-      map.flyTo(center, 13, { duration: 1.5 });
+    // Only fly to location when a NEW vehicle is selected (not on every position update)
+    if (center && vehicleId !== null && vehicleId !== lastFlyToRef.current) {
+      map.flyTo(center, 14, { duration: 1.2 });
+      lastFlyToRef.current = vehicleId;
     }
-  }, [center, map]);
+  }, [vehicleId]); // Only depend on vehicleId, not center
+  
   return null;
 }
 
@@ -87,6 +92,8 @@ interface Vehicle {
   eta: string;
   speed: number;
   routeGeometry?: [number, number][];
+  currentLocationName?: string;
+  lastUpdated?: string;
 }
 
 export default function FleetLiveMonitor() {
@@ -100,23 +107,24 @@ export default function FleetLiveMonitor() {
   // Use ref to track selected vehicle ID for real-time updates
   const selectedVehicleIdRef = useRef<number | null>(null);
 
-  // Fetch real-time fleet data with route geometry
+  // Fetch ONLY active (InProgress) fleet data - deduplicated per driver
   const loadFleet = async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
     try {
-      // Use the new real-time endpoint that includes route geometry
-      const fleetData = await apiService.getFleetRealtime();
+      // Get current user (admin pages should have admin role)
+      const { email, role } = getCurrentUser();
+      
+      // Use the ACTIVE fleet endpoint (STRICT: only InProgress, deduplicated)
+      // Admin sees all fleet, regular users see only their own
+      const fleetData = await apiService.getActiveFleet(email, role);
       
       if (fleetData && fleetData.length > 0) {
-        // Sort by ID descending and take only the latest active fleet
-        const latestFleet = [...fleetData].sort((a, b) => b.id - a.id).slice(0, 1);
-
-        const formattedVehicles: Vehicle[] = latestFleet.map((v: any) => ({
+        const formattedVehicles: Vehicle[] = fleetData.map((v: any) => ({
           id: v.id,
           driverName: v.driverName || v.driverEmail || 'Unknown Driver',
           driverEmail: v.driverEmail || '',
           vehicleId: v.vehicleId || `TRIP-${v.id}`,
-          status: v.status || 'Moving',
+          status: 'In Progress', // Always InProgress from this endpoint
           heading: v.heading || 'En Route',
           lat: v.lat || 13.0827,
           lon: v.lon || 80.2707,
@@ -129,13 +137,15 @@ export default function FleetLiveMonitor() {
           distance: v.distance || 'N/A',
           eta: v.eta || 'Calculating...',
           speed: v.speed || 0,
-          routeGeometry: v.routeGeometry || null
+          routeGeometry: v.routeGeometry || null,
+          currentLocationName: v.currentLocationName || 'Location unavailable',
+          lastUpdated: v.lastUpdated || new Date().toISOString()
         }));
         
         setVehicles(formattedVehicles);
         setLastUpdate(new Date());
         
-        // Auto-select the latest vehicle if none selected
+        // Auto-select the first vehicle if none selected
         if (formattedVehicles.length > 0 && selectedVehicleIdRef.current === null) {
           handleTruckClick(formattedVehicles[0]);
         }
@@ -146,55 +156,23 @@ export default function FleetLiveMonitor() {
           if (updated) {
             setSelectedVehicle(updated);
             setSelectedLocation([updated.lat, updated.lon]);
+          } else {
+            // Selected vehicle no longer active - clear selection
+            selectedVehicleIdRef.current = null;
+            setSelectedVehicle(null);
+            setSelectedLocation(null);
           }
         }
       } else {
-        // Fallback to history API if realtime returns empty
-        const history = await apiService.getHistory();
-        const activeTrips = history.filter((trip: any) => {
-          const status = (trip.status || '').toLowerCase();
-          return status !== 'completed' && status !== 'cancelled' && status !== '';
-        });
-
-        // Sort by ID descending and take only the latest active fleet
-        const latestActive = activeTrips.sort((a: any, b: any) => b.id - a.id).slice(0, 1);
-        
-        const formattedVehicles: Vehicle[] = latestActive.map((trip: any) => ({
-          id: trip.id,
-          driverName: trip.driverName || trip.userName || trip.driverEmail || 'Unknown Driver',
-          driverEmail: trip.driverEmail || '',
-          vehicleId: trip.routeId || `TRIP-${trip.id}`,
-          status: trip.status || 'Moving',
-          heading: 'En Route',
-          lat: trip.currentLat || trip.originLat || 13.0827,
-          lon: trip.currentLon || trip.originLon || 80.2707,
-          originLat: trip.originLat || 13.0827,
-          originLon: trip.originLon || 80.2707,
-          destLat: trip.destinationLat || 13.1,
-          destLon: trip.destinationLon || 80.3,
-          origin: trip.origin || 'Unknown',
-          destination: trip.destination || 'Unknown',
-          distance: trip.distance || 'N/A',
-          eta: trip.eta || 'Calculating...',
-          speed: trip.speed || 0,
-          routeGeometry: null
-        }));
-        
-        setVehicles(formattedVehicles);
+        // No active fleets
+        setVehicles([]);
         setLastUpdate(new Date());
-
-        // Auto-select the latest vehicle if none selected
-        if (formattedVehicles.length > 0 && selectedVehicleIdRef.current === null) {
-          handleTruckClick(formattedVehicles[0]);
-        }
         
-        // Update selected vehicle using ref
+        // Clear selection if no active vehicles
         if (selectedVehicleIdRef.current !== null) {
-          const updated = formattedVehicles.find(v => v.id === selectedVehicleIdRef.current);
-          if (updated) {
-            setSelectedVehicle(updated);
-            setSelectedLocation([updated.lat, updated.lon]);
-          }
+          selectedVehicleIdRef.current = null;
+          setSelectedVehicle(null);
+          setSelectedLocation(null);
         }
       }
     } catch (err) {
@@ -292,17 +270,17 @@ export default function FleetLiveMonitor() {
         </Card>
 
         {/* RIGHT HALF: Map + Route Details */}
-        <div className="w-1/2 flex flex-col gap-4 min-h-0">
-          {/* Map */}
-          <div className="flex-1 bg-gray-100 rounded-2xl overflow-hidden shadow-inner border border-gray-200 relative">
+        <div className="w-1/2 flex flex-col gap-2 min-h-0">
+          {/* Map - Takes most of the space */}
+          <div className="flex-1 bg-gray-100 rounded-2xl overflow-hidden shadow-inner border border-gray-200 relative min-h-[400px]">
              <MapContainer center={[13.0827, 80.2707]} zoom={10} style={{ height: "100%", width: "100%" }}>
                 <TileLayer 
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 />
                 
-                {/* This component handles the camera movement */}
-                <FlyToLocation center={selectedLocation} />
+                {/* This component handles the camera movement - ONCE per vehicle selection */}
+                <FlyToLocation center={selectedLocation} vehicleId={selectedVehicle?.id ?? null} />
 
                 {/* Only show route and markers for selected vehicle */}
                 {selectedVehicle && (
@@ -385,86 +363,54 @@ export default function FleetLiveMonitor() {
              )}
           </div>
 
-          {/* Route Details Panel */}
+          {/* Compact Route Details Panel */}
           {selectedVehicle && (
-            <Card className="p-4 bg-gradient-to-br from-blue-50 to-white">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-blue-100 rounded-full">
-                      <Truck size={18} className="text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-800">{selectedVehicle.driverName}</h3>
-                      <p className="text-xs text-gray-500">{selectedVehicle.vehicleId}</p>
-                    </div>
+            <Card className="p-3 bg-gradient-to-br from-blue-50 to-white shrink-0">
+              <div className="flex items-center gap-4">
+                {/* Driver Info */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1.5 bg-blue-100 rounded-full shrink-0">
+                    <Truck size={16} className="text-blue-600" />
                   </div>
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                    selectedVehicle.status.toLowerCase() === 'moving' 
-                      ? 'bg-green-100 text-green-700' 
-                      : selectedVehicle.status.toLowerCase() === 'idle'
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-red-100 text-red-700'
-                  }`}>
-                    {selectedVehicle.status}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-start gap-2">
-                    <MapPin size={16} className="text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-bold">From</p>
-                      <p className="font-semibold text-gray-800">{selectedVehicle.origin}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <MapPin size={16} className="text-red-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-bold">To</p>
-                      <p className="font-semibold text-gray-800">{selectedVehicle.destination}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center py-2 bg-white rounded-lg">
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase font-bold flex items-center justify-center gap-1">
-                      <RouteIcon size={12} /> Distance
-                    </p>
-                    <p className="font-semibold text-gray-800">{selectedVehicle.distance}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase font-bold flex items-center justify-center gap-1">
-                      <Clock size={12} /> ETA
-                    </p>
-                    <p className="font-semibold text-gray-800">{selectedVehicle.eta}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase font-bold">Speed</p>
-                    <p className="font-semibold text-gray-800">{selectedVehicle.speed} km/h</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-white p-2 rounded-lg">
-                  <div>
-                    <p className="text-gray-400 uppercase font-bold">Current Location</p>
-                    <p><strong>Lat:</strong> {selectedVehicle.lat}</p>
-                    <p><strong>Lon:</strong> {selectedVehicle.lon}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400 uppercase font-bold">Destination</p>
-                    <p><strong>Lat:</strong> {selectedVehicle.destLat}</p>
-                    <p><strong>Lon:</strong> {selectedVehicle.destLon}</p>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-gray-800 text-sm truncate">{selectedVehicle.driverName}</h3>
+                    <p className="text-[10px] text-gray-500 truncate">{selectedVehicle.vehicleId}</p>
                   </div>
                 </div>
                 
-                {selectedVehicle.routeGeometry && (
-                  <div className="text-xs text-center text-green-600 bg-green-50 p-2 rounded-lg">
-                    <RouteIcon size={14} className="inline mr-1" />
-                    Real-time route tracking active ({selectedVehicle.routeGeometry.length} waypoints)
+                {/* Route Info */}
+                <div className="flex items-center gap-1 text-xs text-gray-600 min-w-0 flex-1">
+                  <MapPin size={12} className="text-green-600 shrink-0" />
+                  <span className="truncate">{selectedVehicle.origin}</span>
+                  <span className="text-gray-400">→</span>
+                  <MapPin size={12} className="text-red-600 shrink-0" />
+                  <span className="truncate">{selectedVehicle.destination}</span>
+                </div>
+                
+                {/* Stats */}
+                <div className="flex items-center gap-3 text-xs shrink-0">
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase">Speed</p>
+                    <p className="font-bold text-gray-800">{selectedVehicle.speed} km/h</p>
                   </div>
-                )}
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase">ETA</p>
+                    <p className="font-bold text-gray-800">{selectedVehicle.eta}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-gray-400 uppercase">Dist</p>
+                    <p className="font-bold text-gray-800">{selectedVehicle.distance}</p>
+                  </div>
+                </div>
+                
+                {/* Status Badge */}
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${
+                  selectedVehicle.status.toLowerCase().includes('progress') 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {selectedVehicle.status}
+                </span>
               </div>
             </Card>
           )}

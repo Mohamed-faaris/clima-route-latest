@@ -1,83 +1,106 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, Button, Input, Select } from '../components/Layout';
+import { useSettings } from '../contexts/SettingsContext';
+import { Card, Button, Input } from '../components/Layout';
 import { apiService } from '../services/apiservice';
-import { User, Bell, Shield, Globe, Smartphone, Mail, Save, Lock, Truck } from 'lucide-react';
+import { User, Smartphone, Mail, Save, Lock, Truck } from 'lucide-react';
 
 export default function Settings() {
    const [loading, setLoading] = useState(false);
    const { user } = useAuth();
-   const [temperatureUnit, setTemperatureUnit] = useState<'C'|'F'>('C');
-   const [distanceUnit, setDistanceUnit] = useState<'km'|'mi'>('km');
-   const [timeFormat, setTimeFormat] = useState<'12'|'24'>('24');
-   const [language, setLanguage] = useState('en-US');
+   const { settings, setSettings } = useSettings();
    const [userPassword, setUserPassword] = useState<string>('********');
    const [userName, setUserName] = useState<string>('');
    const [userEmail, setUserEmail] = useState<string>('');
    const [userPhone, setUserPhone] = useState<string>('');
+   const [vehicleId, setVehicleId] = useState<string>('');
    const [userId, setUserId] = useState<number | null>(null);
 
+   // Handle temperature unit change - applies immediately
+   const handleTemperatureChange = async (unit: 'C' | 'F') => {
+      await setSettings({ temperatureUnit: unit });
+   };
+
+   // Handle time format change - applies immediately
+   const handleTimeFormatChange = async (format: '12' | '24') => {
+      await setSettings({ timeFormat: format });
+   };
+
+   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
    const handleSave = () => {
-      if (!user?.email || !userId) return;
+      if (!user?.email || !userId) {
+         setSaveMessage({ type: 'error', text: 'User session not found. Please login again.' });
+         return;
+      }
+
+      // Validate Fleet ID (not empty if provided, proper format)
+      if (vehicleId && vehicleId.trim().length < 3) {
+         setSaveMessage({ type: 'error', text: 'Fleet ID must be at least 3 characters long.' });
+         return;
+      }
+
+      // Validate required fields
+      if (!userName.trim()) {
+         setSaveMessage({ type: 'error', text: 'Name is required.' });
+         return;
+      }
+
+      if (!userEmail.trim() || !userEmail.includes('@')) {
+         setSaveMessage({ type: 'error', text: 'Valid email is required.' });
+         return;
+      }
+
       setLoading(true);
+      setSaveMessage(null);
+
       (async () => {
          try {
-            // Save settings
-            await apiService.updateUserSettings(user.email, { 
-               TemperatureUnit: temperatureUnit, 
-               DistanceUnit: distanceUnit, 
-               TimeFormat: timeFormat, 
-               Language: language 
-            });
-            
-            // Save profile information
+            // Save profile information including Fleet ID
             const profileData: any = {
-               name: userName,
-               email: userEmail,
-               phone: userPhone,
-               password: userPassword
+               name: userName.trim(),
+               email: userEmail.trim(),
+               phone: userPhone.trim(),
+               password: userPassword,
+               vehicleId: vehicleId.trim()
             };
-            await apiService.updateUser(userId, profileData);
+            
+            const result = await apiService.updateUser(userId, profileData);
+            
+            if (!result || !result.success) {
+               throw new Error('Update failed');
+            }
             
             // Update localStorage with new user data
             const updatedUser = {
-               email: userEmail,
-               name: userName,
-               role: user.role
+               email: userEmail.trim(),
+               name: userName.trim(),
+               role: user.role,
+               vehicleId: vehicleId.trim()
             };
             localStorage.setItem('clima_user', JSON.stringify(updatedUser));
+            localStorage.setItem('userEmail', userEmail.trim());
             
-            // Refresh page to update auth context
-            alert('Profile updated successfully!');
-            window.location.reload();
+            // Show success message
+            setSaveMessage({ type: 'success', text: 'Profile and Fleet ID saved successfully!' });
+            
+            // Clear message after 3 seconds
+            setTimeout(() => setSaveMessage(null), 3000);
          } catch (err) {
             console.error('Save settings failed', err);
-            alert('Failed to save changes. Please try again.');
+            setSaveMessage({ type: 'error', text: 'Failed to save changes. Please try again.' });
          } finally {
             setLoading(false);
          }
       })();
    };
 
-   // Load current settings for the user on mount
+   // Load user profile data on mount
    React.useEffect(() => {
       (async () => {
          if (!user?.email) return;
          try {
-            // Load user settings
-            const s: any = await apiService.getUserSettings(user.email);
-            if (s) {
-               if (s.temperatureUnit) setTemperatureUnit(s.temperatureUnit === 'F' ? 'F' : 'C');
-               if (s.temperatureUnit === undefined && s.TemperatureUnit) setTemperatureUnit(s.TemperatureUnit === 'F' ? 'F' : 'C');
-               if (s.distanceUnit) setDistanceUnit(s.distanceUnit === 'mi' ? 'mi' : 'km');
-               if (s.distanceUnit === undefined && s.DistanceUnit) setDistanceUnit(s.DistanceUnit === 'mi' ? 'mi' : 'km');
-               if (s.timeFormat) setTimeFormat(s.timeFormat === '12' ? '12' : '24');
-               if (s.TimeFormat) setTimeFormat(s.TimeFormat === '12' ? '12' : '24');
-               if (s.language) setLanguage(s.language);
-               if (s.Language) setLanguage(s.Language);
-            }
-            
             // Fetch user data to get all profile information
             const users: any = await apiService.getUsers();
             const currentUser = users?.find((u: any) => u.email === user.email);
@@ -85,8 +108,9 @@ export default function Settings() {
                setUserId(currentUser.id);
                setUserName(currentUser.name || '');
                setUserEmail(currentUser.email || '');
-               setUserPhone(currentUser.phone || '+1 (555) 123-4567');
+               setUserPhone(currentUser.phone || '');
                setUserPassword(currentUser.password || '********');
+               setVehicleId(currentUser.vehicleId || '');
             }
          } catch (e) { console.error(e); }
       })();
@@ -94,6 +118,28 @@ export default function Settings() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Save Message Toast */}
+      {saveMessage && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg border ${
+          saveMessage.type === 'success' 
+            ? 'bg-green-50 border-green-300 text-green-800' 
+            : 'bg-red-50 border-red-300 text-red-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            {saveMessage.type === 'success' ? (
+              <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <span className="font-medium">{saveMessage.text}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Settings</h2>
@@ -149,25 +195,6 @@ export default function Settings() {
               </div>
             </div>
           </Card>
-
-          <Card title="Fleet Details">
-             <div className="flex items-start gap-4">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-                   <Truck size={24} />
-                </div>
-                <div>
-                   <p className="text-xs text-gray-500 uppercase font-bold">Current Vehicle</p>
-                   <p className="font-semibold text-gray-800">Volvo VNL 860 (2023)</p>
-                   <p className="text-sm text-gray-500 mt-1">ID: #FLT-8834</p>
-                </div>
-             </div>
-             <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex justify-between items-center text-sm">
-                   <span className="text-gray-600">License Status</span>
-                   <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">Active</span>
-                </div>
-             </div>
-          </Card>
         </div>
 
         {/* Right Column: Settings */}
@@ -176,55 +203,43 @@ export default function Settings() {
           <Card title="General Preferences" className="relative overflow-hidden">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                      <Globe size={16} /> Language
-                   </label>
-                   <Select value={language} onChange={(e) => setLanguage(e.target.value)}>
-                      <option value="en-US">English (US)</option>
-                   </Select>
-                </div>
-                <div>
                    <label className="block text-sm font-medium text-gray-700 mb-2">Time Format</label>
                    <div className="flex bg-gray-100 p-1 rounded-lg">
-                      <button onClick={() => setTimeFormat('12')} className={`flex-1 py-1.5 text-sm font-medium rounded ${timeFormat==='12' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>12-hour</button>
-                      <button onClick={() => setTimeFormat('24')} className={`flex-1 py-1.5 text-sm font-medium rounded ${timeFormat==='24' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>24-hour</button>
-                   </div>
-                </div>
-                <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-2">Distance Units</label>
-                   <div className="flex bg-gray-100 p-1 rounded-lg">
-                      <button onClick={() => setDistanceUnit('mi')} className={`flex-1 py-1.5 text-sm font-medium rounded ${distanceUnit==='mi' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>Miles</button>
-                      <button onClick={() => setDistanceUnit('km')} className={`flex-1 py-1.5 text-sm font-medium rounded ${distanceUnit==='km' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>Km</button>
+                      <button onClick={() => handleTimeFormatChange('12')} className={`flex-1 py-1.5 text-sm font-medium rounded ${settings.timeFormat==='12' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>12-hour</button>
+                      <button onClick={() => handleTimeFormatChange('24')} className={`flex-1 py-1.5 text-sm font-medium rounded ${settings.timeFormat==='24' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>24-hour</button>
                    </div>
                 </div>
                 <div>
                    <label className="block text-sm font-medium text-gray-700 mb-2">Temperature</label>
                    <div className="flex bg-gray-100 p-1 rounded-lg">
-                      <button onClick={() => setTemperatureUnit('F')} className={`flex-1 py-1.5 text-sm font-medium rounded ${temperatureUnit==='F' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>°F Fahrenheit</button>
-                      <button onClick={() => setTemperatureUnit('C')} className={`flex-1 py-1.5 text-sm font-medium rounded ${temperatureUnit==='C' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>°C Celsius</button>
+                      <button onClick={() => handleTemperatureChange('F')} className={`flex-1 py-1.5 text-sm font-medium rounded ${settings.temperatureUnit==='F' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>°F Fahrenheit</button>
+                      <button onClick={() => handleTemperatureChange('C')} className={`flex-1 py-1.5 text-sm font-medium rounded ${settings.temperatureUnit==='C' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`}>°C Celsius</button>
                    </div>
                 </div>
              </div>
           </Card>
 
-          <Card title="Notifications" action={<Bell size={20} className="text-gray-400"/>}>
+          <Card title="Fleet Details">
              <div className="space-y-4">
-                {[
-                   { title: 'Critical Weather Alerts', desc: 'Get immediate alerts for severe weather conditions on your route.', checked: true },
-                   { title: 'Route Deviations', desc: 'Notify when re-routing suggestions are available.', checked: true },
-                   { title: 'Rest Stop Reminders', desc: 'Reminders to take breaks based on driving hours.', checked: true },
-                ].map((item, idx) => (
-                   <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                      <div className="pr-4">
-                         <p className="font-medium text-gray-800">{item.title}</p>
-                         <p className="text-sm text-gray-500">{item.desc}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input type="checkbox" defaultChecked={item.checked} className="sr-only peer" />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vehicle ID</label>
+                   <div className="relative">
+                      <Truck className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                      <Input 
+                         value={vehicleId} 
+                         onChange={(e) => setVehicleId(e.target.value)} 
+                         placeholder="Enter your vehicle ID (e.g., FLT-8834)"
+                         className="pl-10" 
+                      />
                    </div>
-                ))}
+                   <p className="text-xs text-gray-400 mt-1">This ID will be used across all trip records</p>
+                </div>
+                <div className="pt-4 border-t border-gray-100">
+                   <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">License Status</span>
+                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">Active</span>
+                   </div>
+                </div>
              </div>
           </Card>
 

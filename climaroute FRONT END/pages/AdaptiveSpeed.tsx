@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { useSettings } from '../contexts/SettingsContext';
+import { useSettings, formatTime } from '../contexts/SettingsContext';
 
 // --- STYLED COMPONENTS ---
 const DashboardCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
@@ -55,9 +55,9 @@ export default function AdaptiveSpeed() {
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
       const data = await response.json();
       const addr = data.address;
-      return addr.city || addr.town || addr.village || addr.suburb || addr.county || addr.road || `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      return addr.city || addr.town || addr.village || addr.suburb || addr.county || addr.road || "Location unavailable";
     } catch (e) {
-      return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      return "Location unavailable";
     }
   };
 
@@ -192,7 +192,7 @@ export default function AdaptiveSpeed() {
                const now = new Date();
                setSpeedHistory(prev => {
                    const newEntry = { 
-                       time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), 
+                       time: formatTime(now, settings.timeFormat), 
                        speed: speed,
                        distance: traveledDistance
                    };
@@ -290,7 +290,7 @@ export default function AdaptiveSpeed() {
                                     <tr key={i} className="group hover:bg-blue-50/30 transition-colors border-b border-slate-50 last:border-0">
                                         <td className="px-3 py-3">
                                             <div className="font-bold text-slate-700 text-sm">{seg.name}</div>
-                                            <div className="text-xs text-slate-400 mt-0.5">Lat: {seg.lat?.toFixed(4)}, Lon: {seg.lon?.toFixed(4)}</div>
+                                            <div className="text-xs text-slate-400 mt-0.5">📍 Waypoint {i + 1}</div>
                                         </td>
                                         <td className="px-3 py-3">
                                             <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded font-medium">

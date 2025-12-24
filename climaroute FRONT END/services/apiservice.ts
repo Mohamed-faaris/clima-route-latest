@@ -1,5 +1,23 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+// Helper: Get current logged-in user info from localStorage
+export const getCurrentUser = (): { email: string; role: string } => {
+  try {
+    const stored = localStorage.getItem('clima_user');
+    if (stored) {
+      const user = JSON.parse(stored);
+      return { 
+        email: user.email || user.Email || '', 
+        role: user.role || user.Role || 'user' 
+      };
+    }
+    const email = localStorage.getItem('userEmail');
+    return { email: email || '', role: 'user' };
+  } catch {
+    return { email: '', role: 'user' };
+  }
+};
+
 export const apiService = {
   // LOGIN
   login: async (email: string, password: string) => {
@@ -62,7 +80,7 @@ export const apiService = {
   ,
 
   // UPDATE USER (Admin)
-  updateUser: async (id: number, data: { name?: string; email?: string; phone?: string; password?: string; role?: string; status?: string }) => {
+  updateUser: async (id: number, data: { name?: string; email?: string; phone?: string; password?: string; role?: string; status?: string; vehicleId?: string }) => {
     try {
       // Use POST /users/{id}/update as a reliable fallback for environments where PUT may be blocked
       const response = await fetch(`${API_URL}/users/${id}/update`, {
@@ -117,7 +135,69 @@ export const apiService = {
     }
   },
 
-  // CREATE SOS ALERT
+  // === NEW DB-DRIVEN SOS SYSTEM ===
+  
+  // Create SOS Alert (DB-driven)
+  createSosAlert: async (data: { driverEmail: string; vehicleId?: string; type: string; location: string }) => {
+    try {
+      const response = await fetch(`${API_URL}/sos/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          DriverEmail: data.driverEmail,
+          VehicleId: data.vehicleId,
+          Type: data.type,
+          Location: data.location
+        })
+      });
+      if (!response.ok) {
+        const txt = await response.text();
+        throw new Error(txt || 'Failed to create SOS alert');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error('createSosAlert Error:', err);
+      throw err;
+    }
+  },
+
+  // Get active SOS for a driver
+  getActiveSos: async (driverEmail: string) => {
+    try {
+      const response = await fetch(`${API_URL}/sos/active/${encodeURIComponent(driverEmail)}`);
+      if (!response.ok) throw new Error('Failed to fetch active SOS');
+      return await response.json();
+    } catch (err) {
+      console.error('getActiveSos Error:', err);
+      return { hasActive: false, alert: null };
+    }
+  },
+
+  // Resolve SOS alert by ID
+  resolveSosAlert: async (sosId: number) => {
+    try {
+      const response = await fetch(`${API_URL}/sos/resolve/${sosId}`, { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to resolve SOS alert');
+      return await response.json();
+    } catch (err) {
+      console.error('resolveSosAlert Error:', err);
+      throw err;
+    }
+  },
+
+  // Get all SOS alerts (admin)
+  getAllSosAlerts: async () => {
+    try {
+      const response = await fetch(`${API_URL}/sos/all`);
+      if (!response.ok) throw new Error('Failed to fetch all SOS alerts');
+      return await response.json();
+    } catch (err) {
+      console.error('getAllSosAlerts Error:', err);
+      return [];
+    }
+  },
+
+  // CREATE SOS ALERT (Legacy - kept for backward compatibility)
   createAlert: async (alertData: { vehicleId?: string; driverEmail?: string; type: string; location: string }) => {
     try {
       const response = await fetch(`${API_URL}/alerts`, {
@@ -138,10 +218,12 @@ export const apiService = {
     }
   },
 
-  // FLEET MONITORING
-  getFleetLocations: async () => {
+  // FLEET MONITORING - filtered by user
+  getFleetLocations: async (userEmail?: string, userRole?: string) => {
     try {
-      const response = await fetch(`${API_URL}/fleet/locations`);
+      let url = `${API_URL}/fleet/locations`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);\n      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);\n      if (params.length > 0) url += `?${params.join('&')}`;\n      \n      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch fleet locations');
       return await response.json();
     } catch (err) {
@@ -150,14 +232,30 @@ export const apiService = {
     }
   },
 
-  // REAL-TIME FLEET WITH ROUTE GEOMETRY
-  getFleetRealtime: async () => {
+  // REAL-TIME FLEET WITH ROUTE GEOMETRY - filtered by user
+  getFleetRealtime: async (userEmail?: string, userRole?: string) => {
     try {
-      const response = await fetch(`${API_URL}/fleet/realtime`);
+      let url = `${API_URL}/fleet/realtime`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);\n      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);\n      if (params.length > 0) url += `?${params.join('&')}`;\n      \n      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch real-time fleet data');
       return await response.json();
     } catch (err) {
       console.error('getFleetRealtime Error:', err);
+      return []; // Return empty array if offline
+    }
+  },
+
+  // ACTIVE FLEET ONLY (InProgress status, deduplicated per driver) - filtered by user
+  getActiveFleet: async (userEmail?: string, userRole?: string) => {
+    try {
+      let url = `${API_URL}/fleet/active`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);\n      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);\n      if (params.length > 0) url += `?${params.join('&')}`;\n      \n      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch active fleet data');
+      return await response.json();
+    } catch (err) {
+      console.error('getActiveFleet Error:', err);
       return []; // Return empty array if offline
     }
   },
@@ -189,10 +287,16 @@ export const apiService = {
     }
   },
 
-  // GET DELIVERY HISTORY (All users)
-  getHistory: async () => {
+  // GET DELIVERY HISTORY - filtered by user
+  getHistory: async (userEmail?: string, userRole?: string) => {
     try {
-      const response = await fetch(`${API_URL}/history`);
+      let url = `${API_URL}/history`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch history');
       return await response.json();
     } catch (err) {
@@ -201,10 +305,16 @@ export const apiService = {
     }
   },
 
-  // ALIAS: getDeliveryHistory (same as getHistory)
-  getDeliveryHistory: async () => {
+  // ALIAS: getDeliveryHistory - filtered by user
+  getDeliveryHistory: async (userEmail?: string, userRole?: string) => {
     try {
-      const response = await fetch(`${API_URL}/history`);
+      let url = `${API_URL}/history`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch history');
       return await response.json();
     } catch (err) {
@@ -256,19 +366,81 @@ export const apiService = {
     }
   },
 
-  // UPDATE EXISTING HISTORY (real-time telemetry)
-  updateHistory: async (id: number, data: { currentLat?: number; currentLon?: number; eta?: string; speed?: number; status?: string; endTime?: string; destinationLat?: number; destinationLon?: number }) => {
+  // UPDATE EXISTING HISTORY (real-time telemetry or completion) - with ownership check
+  updateHistory: async (id: number, data: { 
+    currentLat?: number; 
+    currentLon?: number; 
+    eta?: string; 
+    speed?: number; 
+    status?: string;
+    tripStatus?: string;
+    endTime?: string; 
+    completedAt?: string;
+    destinationLat?: number; 
+    destinationLon?: number;
+    weather?: string;
+    weatherCondition?: string;
+    temperature?: number;
+    humidity?: number;
+    windSpeed?: number;
+    rainProbability?: number;
+  }, userEmail?: string, userRole?: string) => {
     try {
-      const response = await fetch(`${API_URL}/history/${id}`, {
+      console.log(`Updating history ${id} with:`, data);
+      let url = `${API_URL}/history/${id}`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!response.ok) throw new Error('Failed to update history');
-      return await response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Update history failed:', response.status, errorText);
+        throw new Error('Failed to update history');
+      }
+      const result = await response.json();
+      console.log('Update history result:', result);
+      return result;
     } catch (err) {
       console.error('updateHistory Error:', err);
       return null;
+    }
+  },
+
+  // COMPLETE NAVIGATION - Dedicated endpoint for trip completion (STRICT: InProgress → Completed)
+  completeNavigation: async (data: { 
+    tripId?: number; 
+    navigationId?: number; 
+    driverEmail?: string;
+    endTime?: string;
+    currentLat?: number;
+    currentLon?: number;
+  }) => {
+    try {
+      console.log('[API] Completing navigation with:', data);
+      const response = await fetch(`${API_URL}/navigation/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('[API] Complete navigation failed:', response.status, result);
+        throw new Error(result.error || 'Failed to complete navigation');
+      }
+      
+      console.log('[API] Navigation completed successfully:', result);
+      return result;
+    } catch (err) {
+      console.error('completeNavigation Error:', err);
+      throw err;
     }
   },
 
@@ -294,6 +466,7 @@ export const apiService = {
     windSpeed: number;
     rainProbability: number;
     safetyScore: string;
+    userEmail?: string;
   }) => {
     try {
       const response = await fetch(`${API_URL}/weather/save`, {
@@ -309,10 +482,16 @@ export const apiService = {
     }
   },
 
-  // WEATHER: GET HISTORICAL WEATHER DATA
-  getWeatherHistory: async () => {
+  // WEATHER: GET HISTORICAL WEATHER DATA - filtered by user
+  getWeatherHistory: async (userEmail?: string, userRole?: string) => {
     try {
-      const response = await fetch(`${API_URL}/weather/history`);
+      let url = `${API_URL}/weather/history`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch weather history');
       return await response.json();
     } catch (err) {
@@ -428,7 +607,7 @@ export const apiService = {
     }
   },
 
-  // NOTIFICATIONS: Create a notification
+  // NOTIFICATIONS: Create a notification (generic - for admin/system use)
   createNotification: async (title: string, description: string, category: string = 'Info') => {
     try {
       const response = await fetch(`${API_URL}/notifications`, {
@@ -449,7 +628,30 @@ export const apiService = {
     }
   },
 
-  // NOTIFICATIONS: Get all notifications ordered by timestamp
+  // WEATHER ALERT: Create weather-specific notification (only for HEAVY_RAIN or STORM)
+  createWeatherAlert: async (severity: 'HEAVY_RAIN' | 'STORM', message: string, userEmail?: string) => {
+    try {
+      const response = await fetch(`${API_URL}/notifications/weather`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          severity, 
+          message,
+          userEmail
+        })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to create weather alert');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error('createWeatherAlert Error:', err);
+      return null;
+    }
+  },
+
+  // NOTIFICATIONS: Get all notifications (admin view)
   getNotifications: async () => {
     try {
       const response = await fetch(`${API_URL}/notifications`);
@@ -457,6 +659,59 @@ export const apiService = {
       return await response.json();
     } catch (err) {
       console.error('getNotifications Error:', err);
+      return [];
+    }
+  },
+
+  // WEATHER ALERTS: Get weather alerts only (user view)
+  getWeatherAlerts: async () => {
+    try {
+      const response = await fetch(`${API_URL}/notifications/weather`);
+      if (!response.ok) throw new Error('Failed to fetch weather alerts');
+      return await response.json();
+    } catch (err) {
+      console.error('getWeatherAlerts Error:', err);
+      return [];
+    }
+  },
+
+  // SYSTEM ALERT: Create system status notification (for abnormal status)
+  createSystemAlert: async (severity: 'ABNORMAL' | 'SOS' | 'IDLE_ALERT' | 'EMERGENCY', message: string, userEmail?: string) => {
+    try {
+      const response = await fetch(`${API_URL}/notifications/system`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          severity, 
+          message,
+          userEmail
+        })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to create system alert');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error('createSystemAlert Error:', err);
+      return null;
+    }
+  },
+
+  // USER ALERTS: Get all user notifications (weather + system) - SECURE: filtered by user
+  getUserAlerts: async (userEmail?: string, userRole?: string) => {
+    try {
+      let url = `${API_URL}/notifications/user`;
+      const params: string[] = [];
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch user alerts');
+      return await response.json();
+    } catch (err) {
+      console.error('getUserAlerts Error:', err);
       return [];
     }
   },

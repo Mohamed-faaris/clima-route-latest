@@ -9,7 +9,7 @@ export default function ManageUsers() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [form, setForm] = useState<{ name?: string; email?: string; phone?: string; role?: string; status?: string; password?: string }>({});
+  const [form, setForm] = useState<{ name?: string; email?: string; phone?: string; vehicleId?: string; role?: string; status?: string; password?: string }>({});
 
   // Fetch users from C# Backend
   const loadUsers = async () => {
@@ -56,7 +56,7 @@ export default function ManageUsers() {
 
   const startEdit = (user: any) => {
     setEditingId(user.id);
-    setForm({ name: user.name, email: user.email, phone: user.phone, role: user.role, status: user.status, password: user.password });
+    setForm({ name: user.name, email: user.email, phone: user.phone, vehicleId: user.vehicleId, role: user.role, status: user.status, password: user.password });
   };
 
   const cancelEdit = () => {
@@ -66,7 +66,7 @@ export default function ManageUsers() {
 
   const saveEdit = async (id: number) => {
     try {
-      await apiService.updateUser(id, { name: form.name, email: form.email, phone: form.phone, password: form.password, role: form.role, status: form.status });
+      await apiService.updateUser(id, { name: form.name, email: form.email, phone: form.phone, vehicleId: form.vehicleId, password: form.password, role: form.role, status: form.status });
       setEditingId(null);
       setForm({});
       loadUsers();
@@ -107,6 +107,7 @@ export default function ManageUsers() {
                   <th className="px-6 py-4">Name</th>
                   <th className="px-6 py-4">Email</th>
                   <th className="px-6 py-4">Phone</th>
+                  <th className="px-6 py-4">Fleet ID</th>
                   <th className="px-6 py-4">Password</th>
                   <th className="px-6 py-4">Role</th>
                   <th className="px-6 py-4">Status</th>
@@ -135,6 +136,17 @@ export default function ManageUsers() {
                         <Input value={form.phone} onChange={(e: any) => setForm({ ...form, phone: e.target.value })} placeholder="Phone" />
                       ) : (
                         <p className="text-sm text-gray-700">{user.phone || 'N/A'}</p>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {user.role === 'admin' ? (
+                        <span className="text-gray-400 text-sm">—</span>
+                      ) : editingId === user.id ? (
+                        <Input value={form.vehicleId || ''} onChange={(e: any) => setForm({ ...form, vehicleId: e.target.value })} placeholder="Fleet ID" />
+                      ) : (
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${user.vehicleId ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {user.vehicleId || 'Not Assigned'}
+                        </span>
                       )}
                     </td>
                     <td className="px-6 py-4">

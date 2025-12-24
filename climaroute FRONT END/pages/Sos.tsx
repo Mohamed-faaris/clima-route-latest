@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../components/Layout';
 import { 
     AlertTriangle, Activity, ShieldAlert, Wrench, Truck,
-    Clock, Pause, Play, MapPin, Bell, RotateCcw
+    Clock, Pause, Play, MapPin, Bell, RotateCcw, Navigation
 } from 'lucide-react';
 import { apiService } from '../services/apiservice';
 import { useSos } from '../contexts/SosContext';
+import { useAuth } from '../contexts/AuthContext';
 
 export function SOS() {
   const { 
@@ -13,119 +14,66 @@ export function SOS() {
     idleTimeSeconds, 
     breakModeActive, 
     setBreakModeActive,
+    navigationActive,
+    vehicleStatus,
     triggerSos: triggerGlobalSos,
     resetIdleTimer,
     resolveActiveAlert
   } = useSos();
+  const { user } = useAuth();
 
-  const [isNavigating, setIsNavigating] = useState(false);
-  const [lastGpsLocation, setLastGpsLocation] = useState<[number, number] | null>(null);
   const [currentGpsLocation, setCurrentGpsLocation] = useState<[number, number] | null>(null);
   const [currentLocationName, setCurrentLocationName] = useState<string>("GPS Inactive");
   const [loading, setLoading] = useState(false);
   const [sosActive, setSosActive] = useState(false);
-  const [idleNotificationSent, setIdleNotificationSent] = useState(false);
-  const [vehicleStopped, setVehicleStopped] = useState(false);
-  const [navigationStopped, setNavigationStopped] = useState(false);
-
-  const gpsWatchIdRef = useRef<number | null>(null);
-  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const previousPositionRef = useRef<[number, number] | null>(null);
-  const stoppedCountRef = useRef<number>(0);
+  const [userVehicleId, setUserVehicleId] = useState<string>('');
 
   const IDLE_THRESHOLD = 15 * 60; // 15 minutes in seconds
-  const GPS_POLL_INTERVAL = 5000; // Check GPS every 5 seconds
-  const DISTANCE_THRESHOLD = 10; // Meters; if moved <10m in 5s, consider stopped
-  const STOPPED_CHECKS_REQUIRED = 3; // Need 3 consecutive stopped checks (15 seconds)
 
-  // Helper: Calculate distance between two coordinates (Haversine)
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371000; // Earth radius in meters
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  // Helper: Get location name from coordinates
+  // Helper: Get location name from coordinates (NEVER returns raw coordinates)
   const getLocationName = async (lat: number, lon: number): Promise<string> => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=en`);
       const data = await response.json();
       const addr = data.address;
+      const area = addr.suburb || addr.neighbourhood || addr.hamlet;
       const city = addr.city || addr.town || addr.village || addr.county;
       const state = addr.state;
+      if (area && city) return `${area}, ${city}`;
       if (city && state) return `${city}, ${state}`;
       if (city) return city;
       if (state) return state;
-      return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      return "Location unavailable";
     } catch (e) {
-      return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      return "Location unavailable";
     }
   };
 
-  // Sync navigation state and location from ReRouting page
+  // Sync GPS location from localStorage (set by ReRouting page)
   useEffect(() => {
     const syncInterval = setInterval(() => {
-      // Check if navigation is active from ReRouting page
-      const navActive = localStorage.getItem('climaRoute_navigation_active') === '1';
-      const wasNavigating = isNavigating;
-      setIsNavigating(navActive);
-      
-      // Detect when user clicks "Stop Navigation" button
-      if (wasNavigating && !navActive) {
-        setNavigationStopped(true);
-        setVehicleStopped(true);
-      }
-
-      // Get current GPS location from ReRouting page
       const userPosStr = localStorage.getItem('climaRoute_userPosition');
       if (userPosStr) {
         try {
           const pos = JSON.parse(userPosStr);
           const newPos: [number, number] = [pos[0], pos[1]];
-          
-          // Check if vehicle has stopped (position hasn't changed significantly)
-          if (previousPositionRef.current && navActive) {
-            const distance = calculateDistance(
-              previousPositionRef.current[0], 
-              previousPositionRef.current[1],
-              newPos[0], 
-              newPos[1]
-            );
-            
-            if (distance < DISTANCE_THRESHOLD) {
-              stoppedCountRef.current += 1;
-              if (stoppedCountRef.current >= STOPPED_CHECKS_REQUIRED) {
-                setVehicleStopped(true);
-              }
-            } else {
-              // Vehicle is moving - reset stopped counter
-              stoppedCountRef.current = 0;
-              setVehicleStopped(false);
-            }
-          }
-          
-          previousPositionRef.current = newPos;
           setCurrentGpsLocation(newPos);
-          
-          // Update location name
           getLocationName(newPos[0], newPos[1]).then(name => setCurrentLocationName(name));
         } catch (e) {
           console.error('Error parsing user position', e);
         }
+      } else if (!navigationActive) {
+        setCurrentLocationName("GPS Inactive");
       }
-    }, 1000); // Check every second
+    }, 2000);
 
     return () => clearInterval(syncInterval);
-  }, [isNavigating]);
+  }, [navigationActive]);
 
-  // Toggle break mode
+  // Toggle break mode - ONLY when navigation is active
   const toggleBreakMode = async () => {
+    if (!navigationActive) return; // Block if navigation not active
+    
     const newBreakMode = !breakModeActive;
     setBreakModeActive(newBreakMode);
 
@@ -146,66 +94,71 @@ export function SOS() {
     }
   };
 
-  // Resume navigation - stop and reset timer
+  // Resume navigation - reset timer
   const handleResume = () => {
     resolveActiveAlert();
-    setVehicleStopped(false);
-    setNavigationStopped(false);
-    stoppedCountRef.current = 0;
+    resetIdleTimer();
   };
 
-  // Send notification when idle > 15 minutes
+  // Load user's vehicleId from database
   useEffect(() => {
-    if (idleTimeSeconds >= IDLE_THRESHOLD && !idleNotificationSent && currentLocationName) {
-      setIdleNotificationSent(true);
-      apiService.createNotification(
-        "Vehicle Idle Alert",
-        `Vehicle has been stationary for ${Math.round(idleTimeSeconds / 60)} minutes at ${currentLocationName}. Check on driver status.`,
-        "Critical"
-      ).catch(console.error);
-    }
-  }, [idleTimeSeconds, idleNotificationSent, currentLocationName]);
+    const loadUserVehicleId = async () => {
+      if (!user?.email) return;
+      try {
+        const users: any = await apiService.getUsers();
+        const currentUser = users?.find((u: any) => u.email === user.email);
+        if (currentUser?.vehicleId) {
+          setUserVehicleId(currentUser.vehicleId);
+        }
+      } catch (e) {
+        console.error('Failed to load user vehicleId', e);
+      }
+    };
+    loadUserVehicleId();
+  }, [user?.email]);
 
-  // Trigger SOS alert
+  // Trigger SOS alert - Now uses DB-driven system via context
+  // ONLY allowed when navigation is active
   const handleTriggerSOS = async (type: string) => {
+    if (!navigationActive) {
+      alert("SOS is disabled. Please start navigation first from the Dynamic Re-Route page.");
+      return;
+    }
+    
     if (!window.confirm(`Are you sure you want to trigger a ${type} alert?`)) return;
 
     setLoading(true);
     try {
-      const timestamp = new Date().toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
+      // Use the context's triggerSos which creates alert in DB
+      const success = await triggerGlobalSos(type, currentLocationName, userVehicleId || undefined);
+      
+      if (success) {
+        // Also create notification for admin
+        const userName = user?.name || 'Driver';
+        const userEmail = user?.email || 'unknown';
+        const timestamp = new Date().toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        
+        await apiService.createNotification(
+          `🚨 SOS Alert: ${type}`,
+          `${userName} (${userEmail}) - Vehicle: ${userVehicleId || 'Unknown'} triggered ${type} emergency at ${currentLocationName}. Time: ${timestamp}`,
+          "Emergency"
+        );
 
-      // Get current user info
-      const userEmail = localStorage.getItem('userEmail') || 'unknown';
-      const userName = localStorage.getItem('userName') || 'Driver';
-      const tripId = localStorage.getItem('climaRoute_tripId');
-
-      // Create SOS Alert in database (will show in Admin EmergencyAlerts page)
-      await apiService.createAlert({
-        vehicleId: tripId ? `TRIP-${tripId}` : 'VEHICLE-001',
-        driverEmail: userEmail,
-        type: type,
-        location: currentLocationName
-      });
-
-      // Also create notification for admin
-      await apiService.createNotification(
-        `SOS Alert: ${type}`,
-        `${userName} (${userEmail}) triggered ${type} emergency at ${currentLocationName} (${currentGpsLocation ? `${currentGpsLocation[0].toFixed(4)}, ${currentGpsLocation[1].toFixed(4)}` : 'Unknown'}). Time: ${timestamp}`,
-        "Emergency"
-      );
-
-      await triggerGlobalSos(type);
-      setSosActive(true);
-      setTimeout(() => setSosActive(false), 5000);
-      alert("SOS Signal Sent! Help is on the way.");
+        setSosActive(true);
+        setTimeout(() => setSosActive(false), 5000);
+        alert("SOS Signal Sent! Help is on the way.");
+      } else {
+        alert("Failed to send SOS signal. You may already have an active alert.");
+      }
     } catch (err) {
+      console.error("SOS Error:", err);
       alert("Failed to send SOS signal.");
     } finally {
       setLoading(false);
@@ -221,16 +174,53 @@ export function SOS() {
   const SOSButton = ({ icon: Icon, label, desc }: any) => (
     <button
       onClick={() => handleTriggerSOS(label)}
-      disabled={loading}
-      className="flex flex-col items-center justify-center p-6 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-red-300 hover:bg-red-50 transition-all group h-full disabled:opacity-50 disabled:cursor-not-allowed"
+      disabled={loading || !navigationActive}
+      className={`flex flex-col items-center justify-center p-6 border rounded-xl shadow-sm transition-all group h-full ${
+        !navigationActive 
+          ? 'bg-gray-100 border-gray-200 opacity-50 cursor-not-allowed' 
+          : 'bg-white border-gray-200 hover:shadow-md hover:border-red-300 hover:bg-red-50'
+      } disabled:opacity-50 disabled:cursor-not-allowed`}
     >
-      <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-red-200 transition-colors">
+      <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors ${
+        !navigationActive 
+          ? 'bg-gray-200 text-gray-400' 
+          : 'bg-red-100 text-red-600 group-hover:bg-red-200'
+      }`}>
         <Icon size={32} />
       </div>
-      <h3 className="text-lg font-bold text-gray-800 mb-1">{label}</h3>
+      <h3 className={`text-lg font-bold mb-1 ${!navigationActive ? 'text-gray-400' : 'text-gray-800'}`}>{label}</h3>
       <p className="text-xs text-gray-500 text-center">{desc}</p>
+      {!navigationActive && <p className="text-xs text-orange-500 mt-2">Start navigation first</p>}
     </button>
   );
+
+  // Get display text for vehicle status
+  const getVehicleStatusDisplay = () => {
+    switch (vehicleStatus) {
+      case 'NavigationInactive': return 'Nav. Inactive';
+      case 'Moving': return 'Moving';
+      case 'Stopped': return 'Stopped';
+      default: return 'Unknown';
+    }
+  };
+
+  const getVehicleStatusColor = () => {
+    switch (vehicleStatus) {
+      case 'NavigationInactive': return 'bg-gray-100 text-gray-600';
+      case 'Moving': return 'bg-green-100 text-green-800';
+      case 'Stopped': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  const getVehicleDotColor = () => {
+    switch (vehicleStatus) {
+      case 'NavigationInactive': return 'bg-gray-500';
+      case 'Moving': return 'bg-green-600 animate-pulse';
+      case 'Stopped': return 'bg-orange-600';
+      default: return 'bg-gray-500';
+    }
+  };
 
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col gap-4 overflow-hidden">
@@ -247,28 +237,28 @@ export function SOS() {
         {/* LEFT SIDE: Idle Tracking & Break Mode */}
         <Card className="lg:col-span-1 space-y-4 border-l-4 border-red-500 h-fit max-h-full overflow-auto">
           
+          {/* Navigation Status Banner - Shows when navigation is INACTIVE */}
+          {!navigationActive && (
+            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-2">
+              <Navigation size={16} className="text-orange-600" />
+              <span className="text-sm font-bold text-orange-700">Start navigation to enable SOS monitoring</span>
+            </div>
+          )}
+          
           {/* Navigation & Vehicle Status - Combined Row */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Navigation</label>
-              <div className={`p-2 rounded-lg flex items-center gap-2 ${isNavigating ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                <span className={`w-2.5 h-2.5 rounded-full ${isNavigating ? 'bg-green-600 animate-pulse' : 'bg-gray-600'}`}></span>
-                <span className="font-bold text-xs">{isNavigating ? 'Active' : 'Inactive'}</span>
+              <div className={`p-2 rounded-lg flex items-center gap-2 ${navigationActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${navigationActive ? 'bg-green-600 animate-pulse' : 'bg-gray-600'}`}></span>
+                <span className="font-bold text-xs">{navigationActive ? 'Active' : 'Inactive'}</span>
               </div>
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Vehicle</label>
-              <div className={`p-2 rounded-lg flex items-center gap-2 ${
-                vehicleStopped || navigationStopped 
-                  ? 'bg-orange-100 text-orange-800' 
-                  : 'bg-green-100 text-green-800'
-              }`}>
-                <span className={`w-2.5 h-2.5 rounded-full ${
-                  vehicleStopped || navigationStopped ? 'bg-orange-600' : 'bg-green-600 animate-pulse'
-                }`}></span>
-                <span className="font-bold text-xs">
-                  {navigationStopped ? 'Stopped' : vehicleStopped ? 'Stopped' : 'Moving'}
-                </span>
+              <div className={`p-2 rounded-lg flex items-center gap-2 ${getVehicleStatusColor()}`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${getVehicleDotColor()}`}></span>
+                <span className="font-bold text-xs">{getVehicleStatusDisplay()}</span>
               </div>
             </div>
           </div>
@@ -276,13 +266,13 @@ export function SOS() {
           {/* GPS Location */}
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase block mb-1">
-              <MapPin size={12} className="inline mr-1" /> Location
+              <MapPin size={12} className="inline mr-1" /> Current Location
             </label>
-            <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="text-sm font-bold text-gray-800 truncate">{currentLocationName}</div>
-              <div className="text-xs font-mono text-gray-600">
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-sm font-bold text-gray-800">{currentLocationName || "Fetching location..."}</div>
+              <div className="text-xs text-blue-600 mt-1">
                 {currentGpsLocation 
-                  ? `${currentGpsLocation[0].toFixed(4)}, ${currentGpsLocation[1].toFixed(4)}`
+                  ? "📍 GPS Active"
                   : "GPS Inactive"
                 }
               </div>
@@ -295,23 +285,30 @@ export function SOS() {
               <Clock size={12} className="inline mr-1" /> Idle Duration
             </label>
             <div className={`p-3 rounded-lg text-center font-mono text-2xl font-bold ${
-              idleTimeSeconds >= IDLE_THRESHOLD 
-                ? 'bg-red-50 text-red-600' 
-                : idleTimeSeconds > 0 
-                  ? 'bg-orange-50 text-orange-600' 
-                  : 'bg-gray-50 text-gray-800'
+              !navigationActive
+                ? 'bg-gray-50 text-gray-400'
+                : idleTimeSeconds >= IDLE_THRESHOLD 
+                  ? 'bg-red-50 text-red-600' 
+                  : idleTimeSeconds > 0 
+                    ? 'bg-orange-50 text-orange-600' 
+                    : 'bg-gray-50 text-gray-800'
             }`}>
-              {formatTime(idleTimeSeconds)}
+              {!navigationActive ? '--:--' : formatTime(idleTimeSeconds)}
             </div>
-            {idleTimeSeconds >= IDLE_THRESHOLD && (
+            {!navigationActive && (
+              <p className="text-xs text-gray-500 mt-1 text-center">
+                Timer starts when navigation active & vehicle stopped
+              </p>
+            )}
+            {navigationActive && idleTimeSeconds >= IDLE_THRESHOLD && (
               <p className="text-xs text-red-600 font-bold mt-1 text-center animate-pulse">
                 ⚠️ Idle timeout exceeded
               </p>
             )}
           </div>
 
-          {/* Resume Button - shows when timer is counting */}
-          {(vehicleStopped || navigationStopped) && (
+          {/* Resume Button - shows when idle timer is counting and there's time */}
+          {navigationActive && vehicleStatus === 'Stopped' && idleTimeSeconds > 0 && (
             <button
               onClick={handleResume}
               className="w-full p-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 bg-green-100 text-green-800 border border-green-300 hover:bg-green-200 text-sm"
@@ -327,13 +324,20 @@ export function SOS() {
             </label>
             <button
               onClick={toggleBreakMode}
+              disabled={!navigationActive}
               className={`w-full p-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 text-sm ${
-                breakModeActive
-                  ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                  : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-yellow-50'
+                !navigationActive
+                  ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                  : breakModeActive
+                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                    : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-yellow-50'
               }`}
             >
-              {breakModeActive ? (
+              {!navigationActive ? (
+                <>
+                  <Pause size={14} /> Break Disabled
+                </>
+              ) : breakModeActive ? (
                 <>
                   <Pause size={14} /> Break Active
                 </>
@@ -343,6 +347,9 @@ export function SOS() {
                 </>
               )}
             </button>
+            {!navigationActive && (
+              <p className="text-xs text-gray-400 mt-1 text-center">Start navigation to enable</p>
+            )}
           </div>
         </Card>
 

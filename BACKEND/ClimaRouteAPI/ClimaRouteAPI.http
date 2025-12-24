@@ -1,4 +1,4 @@
-@ClimaRouteAPI_HostAddress = http://localhost:5265
+@ClimaRouteAPI_HostAddress = http://localhost:5000
 
 GET {{ClimaRouteAPI_HostAddress}}/weatherforecast/
 Accept: application/json

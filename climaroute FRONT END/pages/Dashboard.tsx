@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/Layout';
 import { CloudRain, AlertTriangle, Clock, Activity, Navigation, Crosshair } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { apiService } from '../services/apiservice'; // Ensure filename matches case
+import { apiService, getCurrentUser } from '../services/apiservice'; // Ensure filename matches case
 import { useSettings, convertTemp } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSos } from '../contexts/SosContext';
@@ -100,16 +100,19 @@ export default function Dashboard() {
     const savedEta = sessionStorage.getItem('climaRoute_eta');
     if (savedEta) setCurrentEta(savedEta);
 
-    // B. FETCH FROM BACKEND (Database)
+    // B. FETCH FROM BACKEND (Database) - with user-specific filtering
     const loadData = async () => {
       try {
+        // Get current user for filtered data
+        const { email, role } = getCurrentUser();
+        
         const [notifsData, weatherData] = await Promise.all([
-            apiService.getNotifications(),
+            apiService.getUserAlerts(email, role), // User-specific notifications
             apiService.getWeatherForecast()
         ]);
 
-        // 1. Set Notifications (Take top 3)
-        setNotifications(notifsData.slice(0, 3));
+        // 1. Set Notifications (Take top 3) - already filtered by backend
+        setNotifications(Array.isArray(notifsData) ? notifsData.slice(0, 3) : []);
         
         // 2. Set Weather
         setWeather(weatherData);
@@ -140,6 +143,15 @@ export default function Dashboard() {
     };
     loadData();
   }, []);
+
+  // Update temperature display when settings change
+  useEffect(() => {
+    if (weather && weather.current) {
+      const valC = Number(weather.current.temperature || 0);
+      const display = convertTemp(valC, settings.temperatureUnit);
+      setCurrentTemp(display);
+    }
+  }, [settings.temperatureUnit, weather]);
 
   // Poll for live session changes (update every 2s while nav active)
   useEffect(() => {
@@ -318,7 +330,7 @@ export default function Dashboard() {
              >
                 <CloudRain className="text-blue-500 mb-2" size={24} />
                 <span className="text-xs text-gray-400 uppercase font-bold">Temp</span>
-                <span className="font-bold text-gray-800">{currentTemp}°C</span>
+                <span className="font-bold text-gray-800">{currentTemp}°{settings.temperatureUnit}</span>
              </Card>
           </div>
         </div>

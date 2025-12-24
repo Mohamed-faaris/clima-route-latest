@@ -4,8 +4,8 @@ import {
     Cloud, Sun, CloudRain, Wind, Droplets, 
     Calendar, Loader, AlertTriangle, Bell
 } from 'lucide-react';
-import { apiService } from '../services/apiservice';
-import { useSettings, convertTemp } from '../contexts/SettingsContext';
+import { apiService, getCurrentUser } from '../services/apiservice';
+import { useSettings, convertTemp, formatTime } from '../contexts/SettingsContext';
 
 // Background images (placed in components/)
 import skyImg from '../components/sky.jpg';
@@ -60,9 +60,11 @@ export function Weather() {
     const [error, setError] = useState(false);
     const [lastRainProb, setLastRainProb] = useState<number | null>(null);
     const [stormDetected, setStormDetected] = useState(false);
+    const [alertSentForSession, setAlertSentForSession] = useState(false); // Prevent duplicate alerts
     const autoUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const STORM_THRESHOLD = 70; // Rain probability > 70% = storm
+    const HEAVY_RAIN_THRESHOLD = 50; // Rain probability > 50% = heavy rain
     const AUTO_UPDATE_INTERVAL = 3600000; // 1 hour in milliseconds
 
     // Fetch weather data
@@ -74,37 +76,60 @@ export function Weather() {
                 setCurrentWeather(weatherRes);
                 
                 const currentRainProb = weatherRes.prediction?.probability || 0;
+                const condition = weatherRes.current.condition?.toLowerCase() || '';
                 
-                // Check for storm (sudden increase in rain probability)
-                if (lastRainProb !== null && currentRainProb > STORM_THRESHOLD && lastRainProb <= STORM_THRESHOLD) {
-                    // Storm detected!
-                    setStormDetected(true);
-                    await apiService.createNotification(
-                        "⛈️ Storm Alert",
-                        `Sudden storm detected! Rain probability jumped to ${currentRainProb.toFixed(1)}%. Finding nearby rest points...`,
-                        "Emergency"
-                    );
-                    // Auto-suggest rest points (can be triggered by parent component)
+                // Only send alert if not already sent in this session
+                if (!alertSentForSession) {
+                    // Check for STORM (rain prob > 70% OR condition contains storm/thunder)
+                    if (currentRainProb > STORM_THRESHOLD || condition.includes('storm') || condition.includes('thunder')) {
+                        setStormDetected(true);
+                        setAlertSentForSession(true);
+                        
+                        // Send STORM weather alert to backend (DB-persisted)
+                        await apiService.createWeatherAlert(
+                            'STORM',
+                            `⚠️ Severe storm detected! Rain probability: ${currentRainProb.toFixed(1)}%. Condition: ${weatherRes.current.condition}. Consider pulling over to a safe location.`,
+                            localStorage.getItem('userEmail') || undefined
+                        );
+                        console.log('STORM alert sent to database');
+                    }
+                    // Check for HEAVY RAIN (rain prob > 50% but < 70%)
+                    else if (currentRainProb > HEAVY_RAIN_THRESHOLD || condition.includes('heavy rain')) {
+                        setAlertSentForSession(true);
+                        
+                        // Send HEAVY_RAIN weather alert to backend (DB-persisted)
+                        await apiService.createWeatherAlert(
+                            'HEAVY_RAIN',
+                            `🌧️ Heavy rain detected! Rain probability: ${currentRainProb.toFixed(1)}%. Reduce speed and increase following distance.`,
+                            localStorage.getItem('userEmail') || undefined
+                        );
+                        console.log('HEAVY_RAIN alert sent to database');
+                    }
                 }
                 
                 setLastRainProb(currentRainProb);
                 
-                // Save to DB for history
+                // Get current user for saving weather data
+                const currentUserEmail = localStorage.getItem('userEmail') || '';
+                
+                // Save to DB for history - with user email for filtering
                 const savePayload = {
                     temperature: weatherRes.current.temperature,
                     condition: weatherRes.current.condition,
                     humidity: weatherRes.current.humidity,
                     windSpeed: weatherRes.current.wind_speed,
                     rainProbability: currentRainProb,
-                    safetyScore: weatherRes.prediction?.status || 'Unknown'
+                    safetyScore: weatherRes.prediction?.status || 'Unknown',
+                    userEmail: currentUserEmail || undefined
                 };
                 await apiService.saveWeather(savePayload);
             } else {
                 throw new Error("No weather data");
             }
 
-            // Fetch historical data
-            const historyRes = await apiService.getWeatherHistory();
+            // Fetch historical data - filtered by user (uses exported getCurrentUser)
+            const { email, role } = getCurrentUser();
+            const historyRes = await apiService.getWeatherHistory(email, role);
             if (historyRes) {
                 setHistoryData(historyRes);
             }
@@ -277,11 +302,7 @@ export function Weather() {
                             {hourlyData.length > 0 ? (
                                 hourlyData.map((h, i) => {
                                     const date = new Date(h.recordedAt);
-                                    const timeStr = date.toLocaleTimeString('en-US', { 
-                                        hour: 'numeric', 
-                                        minute: '2-digit',
-                                        hour12: true 
-                                    });
+                                    const timeStr = formatTime(date, settings.timeFormat);
                                     return (
                                         <div 
                                             key={i} 

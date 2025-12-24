@@ -28,14 +28,68 @@ const endIcon = new L.Icon({
   iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
 });
 
-const vanIcon = new L.Icon({
-  // Vehicle icon for live navigation
-  iconUrl: 'https://cdn-icons-png.flaticon.com/512/3097/3097138.png',
-  iconSize: [40, 40],
-  iconAnchor: [20, 20],
-  popupAnchor: [0, -20],
-  className: 'z-[1000] drop-shadow-lg'
+const truckIcon = L.divIcon({
+  html: `<div style="background: #3b82f6; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle>
+    </svg>
+  </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+  popupAnchor: [0, -16]
 });
+
+// Live Location Overlay Component - Shows human-readable location name (NEVER raw coordinates)
+function LiveLocationOverlay({ lat, lon }: { lat: number; lon: number }) {
+  const [locationName, setLocationName] = useState<string>("Resolving location...");
+  const cacheRef = useRef<{ [key: string]: string }>({});
+
+  useEffect(() => {
+    const fetchLocationName = async () => {
+      // Cache key to avoid excessive API calls
+      const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+      
+      if (cacheRef.current[cacheKey]) {
+        setLocationName(cacheRef.current[cacheKey]);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=en`
+        );
+        const data = await response.json();
+        const addr = data.address;
+        
+        const area = addr.suburb || addr.neighbourhood || addr.hamlet;
+        const city = addr.city || addr.town || addr.village || addr.county;
+        const state = addr.state;
+        
+        let name = "Location unavailable";
+        if (area && city) name = `${area}, ${city}`;
+        else if (city && state) name = `${city}, ${state}`;
+        else if (city) name = city;
+        else if (state) name = state;
+        
+        cacheRef.current[cacheKey] = name;
+        setLocationName(name);
+      } catch (e) {
+        setLocationName("Location unavailable");
+      }
+    };
+
+    fetchLocationName();
+  }, [lat, lon]);
+
+  return (
+    <div className="absolute top-4 left-4 z-[1000] px-4 py-2 rounded-lg shadow-lg border backdrop-blur-md bg-green-50 border-green-300">
+      <span className="text-[10px] uppercase font-bold text-gray-600 tracking-wider">Live Location</span>
+      <p className="text-sm font-semibold text-gray-700">{locationName}</p>
+      <p className="text-[10px] text-green-600 mt-0.5">📍 GPS Active</p>
+    </div>
+  );
+}
 
 // Helper: Fit Map Bounds
 function FitBounds({ routeData }: { routeData: any }) {
@@ -116,10 +170,26 @@ export function ReRouting() {
   });
   const [isAutoRerouting, setIsAutoRerouting] = useState(false);
   const [rerouteMessage, setRerouteMessage] = useState<string | null>(null);
+  const [distanceToDestination, setDistanceToDestination] = useState<number | null>(null);
   const [activeTripId, setActiveTripId] = useState<number | null>(() => {
     const saved = localStorage.getItem('climaRoute_tripId');
     return saved ? parseInt(saved) : null;
   });
+
+  // --- CALCULATE DISTANCE TO DESTINATION ---
+  useEffect(() => {
+    if (isNavigating && userPosition && routeData?.endCoords) {
+      const destCoords: [number, number] = [routeData.endCoords.lat, routeData.endCoords.lon];
+      const distKm = distanceKm(userPosition, destCoords);
+      const distMeters = distKm * 1000;
+      setDistanceToDestination(distMeters);
+    } else {
+      setDistanceToDestination(null);
+    }
+  }, [userPosition, routeData, isNavigating]);
+
+  // Check if user is near destination (within 100 meters)
+  const isNearDestination = distanceToDestination !== null && distanceToDestination <= 100;
 
   // --- PERSIST STATE TO LOCALSTORAGE ---
   useEffect(() => {
@@ -402,16 +472,42 @@ export function ReRouting() {
         if (dest.length < endAddr.length) setDest(endAddr);
       }
 
-      // Force Ghost Route if only 1 exists (Visual Aid)
-      if (data.alternatives.length === 1) {
-          const original = data.alternatives[0];
-          const ghostGeo = original.geometry.map((p: number[]) => [p[0] + 0.02, p[1] + 0.02]);
-          data.alternatives.push({
-              ...original,
-              id: 99,
-              safetyScore: 60,
-              geometry: ghostGeo
-          });
+      // VALIDATION: Ensure routes are valid and unique (no fake routes)
+      if (data.alternatives && data.alternatives.length > 0) {
+          // Filter out duplicate routes by comparing geometry hash
+          const uniqueRoutes: any[] = [];
+          const seenGeometries = new Set<string>();
+          
+          for (const route of data.alternatives) {
+              if (!route.geometry || route.geometry.length < 2) {
+                  console.warn('Skipping invalid route with insufficient geometry');
+                  continue;
+              }
+              
+              // Create a simple hash of the route geometry
+              const geoHash = route.geometry.slice(0, 5).map((p: number[]) => 
+                  `${p[0].toFixed(3)},${p[1].toFixed(3)}`
+              ).join('|');
+              
+              if (!seenGeometries.has(geoHash)) {
+                  seenGeometries.add(geoHash);
+                  uniqueRoutes.push(route);
+              } else {
+                  console.warn('Skipping duplicate route');
+              }
+          }
+          
+          if (uniqueRoutes.length === 0) {
+              setError("No valid route available between source and destination. Please try different locations.");
+              setLoading(false);
+              return;
+          }
+          
+          data.alternatives = uniqueRoutes;
+      } else {
+          setError("No valid route available between source and destination. Please try different locations.");
+          setLoading(false);
+          return;
       }
 
       setRouteData(data);
@@ -700,108 +796,110 @@ export function ReRouting() {
 
   // Complete trip, save to database, and clear everything
   const completeAndSave = async () => {
+      // Confirmation dialog
+      if (!window.confirm("Are you sure you want to complete and save this journey?")) {
+        return;
+      }
+
+      const endTime = new Date();
+      const tid = activeTripId || parseInt(localStorage.getItem('climaRoute_tripId') || '0') || null;
+      const driverEmail = localStorage.getItem('userEmail') || 'user@gami.com';
+
+      console.log('[CompleteAndSave] Starting completion for tripId:', tid, 'driverEmail:', driverEmail);
+
+      // STEP 1: Call backend API to update database (MANDATORY)
+      let completionSuccess = false;
+      let completionError = '';
+
       try {
-        // Save completed trip to database
-        if (tripStartTime && userPosition && navigationStartCoords && routeData && selectedRouteIndex !== null) {
-          const selectedRoute = routeData.alternatives[selectedRouteIndex];
-          const endTime = new Date();
-          const durationMinutes = (endTime.getTime() - tripStartTime.getTime()) / (1000 * 60);
-
-          const tid = activeTripId || (parseInt(sessionStorage.getItem('climaRoute_tripId') || '0') || null);
-
-          // Decide completion status based on proximity to destination
-          let completionStatus: "Completed" | "NotCompleted" = "Completed";
-          const endPoint: [number, number] | null = selectedRoute?.geometry?.slice(-1)[0]
-            ? [selectedRoute.geometry.slice(-1)[0][0], selectedRoute.geometry.slice(-1)[0][1]]
-            : null;
-          if (endPoint) {
-            const dist = distanceKm(userPosition, endPoint);
-            if (dist > 0.5) completionStatus = "NotCompleted"; // >500m away
-          }
-
-          const finalData: any = {
-            status: completionStatus,
-            endTime: endTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-            destinationLat: userPosition[0],
-            destinationLon: userPosition[1],
-            currentLat: userPosition[0],
-            currentLon: userPosition[1],
-            speed: parseInt(localStorage.getItem('climaRoute_liveSpeed') || '0') || undefined,
-            weather: (selectedRoute?.condition || currentWeather?.condition || "Unknown"),
-            weatherCondition: (selectedRoute?.condition || currentWeather?.condition || "Unknown"),
-            temperature: currentWeather?.temperature,
-            humidity: currentWeather?.humidity,
-            windSpeed: currentWeather?.wind_speed,
-            rainProbability: selectedRoute?.rainProbability ?? currentWeather?.rain_prob
-          };
-
+        const completionResult = await apiService.completeNavigation({
+          tripId: tid || undefined,
+          driverEmail: driverEmail,
+          endTime: endTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          currentLat: userPosition?.[0] || routeData?.endCoords?.lat,
+          currentLon: userPosition?.[1] || routeData?.endCoords?.lon
+        });
+        
+        console.log('[CompleteAndSave] API Response:', completionResult);
+        
+        if (completionResult && completionResult.success) {
+          completionSuccess = true;
+          console.log('[CompleteAndSave] ✅ Trip completed successfully! Status:', completionResult.status);
+        } else {
+          completionError = completionResult?.error || 'Unknown error';
+          console.error('[CompleteAndSave] ❌ API returned failure:', completionResult);
+        }
+      } catch (err: any) {
+        console.error('[CompleteAndSave] ❌ API Error:', err);
+        completionError = err.message || 'Network error';
+        
+        // Fallback: Try updateHistory if completeNavigation fails
+        if (tid) {
           try {
-            if (tid) {
-              await apiService.updateHistory(tid, finalData);
-            } else {
-              // fallback: create completed trip
-              const tripData = {
-                routeId: `TRIP-${Date.now()}`,
-                date: tripStartTime.toISOString().split('T')[0],
-                startTime: tripStartTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-                endTime: endTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-                origin,
-                destination: dest,
-                originLat: navigationStartCoords[0],
-                originLon: navigationStartCoords[1],
-                destinationLat: userPosition[0],
-                destinationLon: userPosition[1],
-                weather: (selectedRoute?.condition || currentWeather?.condition || "Unknown"),
-                weatherCondition: (selectedRoute?.condition || currentWeather?.condition || "Unknown"),
-                temperature: currentWeather?.temperature,
-                humidity: currentWeather?.humidity,
-                windSpeed: currentWeather?.wind_speed,
-                rainProbability: selectedRoute?.rainProbability ?? currentWeather?.rain_prob,
-                safetyScore: selectedRoute?.safetyScore || "Safe",
-                distance: `${(selectedRoute?.distance / 1000).toFixed(2)}`,
-                duration: durationMinutes,
-                status: completionStatus,
-                driverEmail: localStorage.getItem('userEmail') || "user@gami.com",
-                notes: `Auto-rerouted ${Math.floor(timeLeft / TIMER_START)} times`
-              };
-              const result = await apiService.saveDeliveryTrip(tripData);
-              if (!result) {
-                console.warn('Failed to save trip to database');
-              }
+            console.log('[CompleteAndSave] Trying fallback updateHistory for tripId:', tid);
+            const fallbackResult = await apiService.updateHistory(tid, { 
+              status: 'Completed', 
+              tripStatus: 'Completed',
+              endTime: endTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+              speed: 0
+            });
+            
+            // updateHistory returns { success: true, ... } on success
+            if (fallbackResult && (fallbackResult.success || fallbackResult.status === 'Completed')) {
+              completionSuccess = true;
+              completionError = '';
+              console.log('[CompleteAndSave] ✅ Fallback succeeded:', fallbackResult);
             }
-          } catch (err) {
-            console.error('Failed to finalize trip', err);
+          } catch (fallbackErr) {
+            console.error('[CompleteAndSave] ❌ Fallback also failed:', fallbackErr);
           }
         }
-      } catch (err) {
-        console.error("Failed to save trip:", err);
-      } finally {
-        setIsNavigating(false);
-        setTimeLeft(TIMER_START);
-        setTripStartTime(null);
-        setNavigationStartCoords(null);
-        setActiveTripId(null);
-        if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
-        
-        // Clear all route data and reset to initial state
-        setRouteData(null);
-        setSelectedRouteIndex(null);
-        setUserPosition(null);
-        setCurrentWeather(null);
-        
-        // Clear navigation values and route data from localStorage
-        localStorage.removeItem('climaRoute_navigation_active');
-        localStorage.removeItem('climaRoute_liveSpeed');
-        localStorage.removeItem('climaRoute_eta');
-        localStorage.removeItem('climaRoute_tripId');
-        localStorage.removeItem('climaRoute_tripStartTime');
-        localStorage.removeItem('climaRoute_timeLeft');
-        localStorage.removeItem('climaRoute_navStartCoords');
-        localStorage.removeItem('climaRoute_data');
-        localStorage.removeItem('climaRoute_userPosition');
-        localStorage.removeItem('climaRoute_selectedRoute');
-        localStorage.removeItem('climaRoute_weather');
       }
+
+      // STEP 2: Only proceed with UI cleanup if DB update succeeded
+      if (!completionSuccess) {
+        alert(`Failed to complete journey: ${completionError}\n\nPlease try again or check your connection.`);
+        return; // DO NOT clear state if DB update failed
+      }
+
+      // STEP 3: DB update confirmed - now safe to clear UI state
+      console.log('[CompleteAndSave] ✅ DB confirmed - clearing local state');
+      
+      setIsNavigating(false);
+      setTimeLeft(TIMER_START);
+      setTripStartTime(null);
+      setNavigationStartCoords(null);
+      setActiveTripId(null);
+      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+      
+      // Clear all route data and reset to initial state
+      setRouteData(null);
+      setSelectedRouteIndex(null);
+      setUserPosition(null);
+      setCurrentWeather(null);
+      setDistanceToDestination(null);
+      
+      // Clear navigation values and route data from localStorage
+      localStorage.removeItem('climaRoute_navigation_active');
+      localStorage.removeItem('climaRoute_liveSpeed');
+      localStorage.removeItem('climaRoute_eta');
+      localStorage.removeItem('climaRoute_tripId');
+      localStorage.removeItem('climaRoute_tripStartTime');
+      localStorage.removeItem('climaRoute_timeLeft');
+      localStorage.removeItem('climaRoute_navStartCoords');
+      localStorage.removeItem('climaRoute_data');
+      localStorage.removeItem('climaRoute_userPosition');
+      localStorage.removeItem('climaRoute_selectedRoute');
+      localStorage.removeItem('climaRoute_weather');
+      
+      // Clear session storage navigation flag
+      sessionStorage.removeItem('climaRoute_navigation_active');
+      sessionStorage.removeItem('climaRoute_liveSpeed');
+      sessionStorage.removeItem('climaRoute_eta');
+      sessionStorage.removeItem('climaRoute_routeSegments');
+
+      // Show success message
+      alert('✅ Journey completed and saved successfully!');
   };
 
     const handleUseCurrentLoc = async () => {
@@ -828,12 +926,9 @@ export function ReRouting() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
         <div className="lg:col-span-2 bg-gray-200 rounded-xl overflow-hidden relative shadow-inner min-h-[400px] border border-gray-300">
            
-           {/* LIVE LOCATION DISPLAY (Top-Left) */}
+           {/* LIVE LOCATION DISPLAY (Top-Left) - Shows human-readable location name */}
            {userPosition && (
-               <div className={`absolute top-4 left-4 z-[1000] px-4 py-2 rounded-lg shadow-lg border backdrop-blur-md ${userPosition ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300 animate-pulse'}`}>
-                   <span className="text-[10px] uppercase font-bold text-gray-600 tracking-wider">Live Location</span>
-                   <p className="text-sm font-mono text-gray-700">{userPosition[0].toFixed(4)}, {userPosition[1].toFixed(4)}</p>
-               </div>
+               <LiveLocationOverlay lat={userPosition[0]} lon={userPosition[1]} />
            )}
 
            {/* GPS OFF RED BLINK (if navigating but no GPS) */}
@@ -867,7 +962,7 @@ export function ReRouting() {
                   {!isNavigating && <FitBounds routeData={routeData} />}
                   <Marker position={[routeData.startCoords.lat, routeData.startCoords.lon]} icon={startIcon}><Popup>Start: {origin}</Popup></Marker>
                   <Marker position={[routeData.endCoords.lat, routeData.endCoords.lon]} icon={endIcon}><Popup>Dest: {dest}</Popup></Marker>
-                  {userPosition && <Marker position={userPosition} icon={vanIcon} zIndexOffset={1000}><Popup>Your Vehicle</Popup></Marker>}
+                  {userPosition && <Marker position={userPosition} icon={truckIcon} zIndexOffset={1000}><Popup>Your Truck</Popup></Marker>}
                   
                   {routeData.alternatives?.map((route: any, index: number) => {
                       const isSelected = selectedRouteIndex === index;
@@ -977,12 +1072,37 @@ export function ReRouting() {
                     <div className="p-3 bg-green-50 rounded-lg text-center border border-green-200">
                         <p className="text-green-800 font-bold text-xs uppercase mb-1">Live Tracking Active</p>
                         <p className="text-[11px] text-green-700 mb-1">Auto-reroute active (Test: 10s)</p>
+                        {distanceToDestination !== null && (
+                          <p className="text-[10px] text-gray-500 mt-1">Distance to destination: {distanceToDestination < 1000 ? `${Math.round(distanceToDestination)}m` : `${(distanceToDestination/1000).toFixed(1)}km`}</p>
+                        )}
                     </div>
                     
-                    {/* 1. Complete & Save */}
-                    <Button className="w-full justify-center py-2 text-sm bg-emerald-600 hover:bg-emerald-700 shadow-md" onClick={completeAndSave}>
-                        <Navigation className="mr-2" size={16}/> Complete & Save
-                    </Button>
+                    {/* 1. Complete & Save - Only visible when within 100m of destination */}
+                    {isNearDestination && (
+                      <div className="space-y-2">
+                        <div 
+                          className="p-3 bg-green-100 rounded-lg text-center border border-green-300"
+                          style={{
+                            animation: 'pulseGlow 2s ease-in-out infinite'
+                          }}
+                        >
+                          <style>{`
+                            @keyframes pulseGlow {
+                              0%, 100% { opacity: 1; background-color: rgb(220 252 231); }
+                              50% { opacity: 0.7; background-color: rgb(187 247 208); }
+                            }
+                          `}</style>
+                          <p className="text-green-700 font-semibold text-sm flex items-center justify-center gap-2">
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                            You are near the destination.
+                          </p>
+                          <p className="text-green-600 text-xs mt-1">Do you want to complete your journey?</p>
+                        </div>
+                        <Button className="w-full justify-center py-2 text-sm bg-emerald-600 hover:bg-emerald-700 shadow-md" onClick={completeAndSave}>
+                            <Navigation className="mr-2" size={16}/> Complete & Save
+                        </Button>
+                      </div>
+                    )}
                     
                     {/* 2. Pause/Resume */}
                     <Button 

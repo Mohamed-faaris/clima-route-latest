@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, CheckCircle, AlertCircle, Loader, Calendar, Download, Filter, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { apiService } from '../services/apiservice';
+import { apiService, getCurrentUser } from '../services/apiservice';
 import { Card, Button, Select } from '../components/Layout';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -14,27 +14,16 @@ export function History() {
   const [sortBy, setSortBy] = useState('date-desc');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch data on mount - filter by current user's email
+  // Fetch data on mount - SECURE: Backend filtering by user
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await apiService.getDeliveryHistory();
-        const allHistory = Array.isArray(data) ? data : [];
+        // Get current user credentials for backend filtering
+        const { email, role } = getCurrentUser();
         
-        // Get current user's email from localStorage
-        const currentUserEmail = localStorage.getItem('userEmail');
-        
-        // Filter history to show only current user's trips (unless admin)
-        const storedUser = localStorage.getItem('clima_user');
-        const user = storedUser ? JSON.parse(storedUser) : null;
-        
-        let userHistory = allHistory;
-        if (user?.role !== 'admin' && currentUserEmail) {
-          // Regular users see only their own trips
-          userHistory = allHistory.filter((h: any) => 
-            h.driverEmail?.toLowerCase() === currentUserEmail.toLowerCase()
-          );
-        }
+        // Fetch history with user credentials - backend handles filtering
+        const data = await apiService.getDeliveryHistory(email, role);
+        const userHistory = Array.isArray(data) ? data : [];
         
         setHistory(userHistory);
         setFilteredHistory(userHistory);

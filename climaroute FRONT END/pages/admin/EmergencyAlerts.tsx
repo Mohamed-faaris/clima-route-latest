@@ -15,7 +15,17 @@ export default function EmergencyAlerts() {
         apiService.getAlerts(),
         apiService.getUsers()
       ]);
-      setAlerts(alertsData || []);
+      // Sort: Active alerts first, then by createdAt (most recent first)
+      const sortedAlerts = (alertsData || []).sort((a: any, b: any) => {
+        // Active alerts come first
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        // Then sort by createdAt descending (most recent first)
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+      setAlerts(sortedAlerts);
       setUsers(usersData || []);
     } catch (err) {
       console.error("Failed to load alerts", err);
@@ -124,7 +134,7 @@ export default function EmergencyAlerts() {
                     </div>
                     <div>
                         <p className="text-xs text-gray-500 flex items-center gap-1 mb-1"><Clock size={12}/> Time</p>
-                        <p className="font-semibold text-gray-800">{formatTime(alert.time)}</p>
+                        <p className="font-semibold text-gray-800">{alert.time || formatTime(alert.createdAt)}</p>
                     </div>
                   </div>
 

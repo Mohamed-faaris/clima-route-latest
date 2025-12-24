@@ -9,6 +9,10 @@ namespace ClimaRouteAPI.Models
         public string Password { get; set; }
         public string Role { get; set; } // "admin" or "user"
         public string Status { get; set; } // "Active", "On Leave"
+        public string Phone { get; set; } // User phone number
+        public string VehicleId { get; set; } // Fleet/Vehicle ID assigned to user
+        public string PlainPassword { get; set; } // Stored password for display (demo only)
+        public DateTime? UpdatedAt { get; set; } // Last update timestamp
     }
 
     public class LoginRequest 

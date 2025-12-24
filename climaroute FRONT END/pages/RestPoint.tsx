@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Select } from '../components/Layout';
 import { 
     MapPin, Coffee, Fuel, Navigation, Loader, 
-    AlertTriangle, Phone, Info
+    AlertTriangle, Phone, Info, Truck
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, Popup } from 'react-leaflet';
 import { apiService } from '../services/apiservice';
@@ -30,6 +30,19 @@ const restPointIcon = new L.Icon({
     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
 });
 
+// Navigation vehicle icon - truck design
+const navigationVehicleIcon = L.divIcon({
+    html: `<div style="background: #3b82f6; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
+        </svg>
+    </div>`,
+    className: 'custom-vehicle-icon',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16]
+});
+
 function FitBounds({ coords }: { coords: [number, number] | null }) {
     const map = useMap();
     useEffect(() => {
@@ -43,7 +56,8 @@ function FitBounds({ coords }: { coords: [number, number] | null }) {
 export function RestPoint() {
     const { settings } = useSettings();
     const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-    const [userLocationName, setUserLocationName] = useState<string>("Fetching...");
+    const [userLocationName, setUserLocationName] = useState<string>("Fetching location...");
+    const [isLocationLoading, setIsLocationLoading] = useState(true);
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
@@ -52,67 +66,127 @@ export function RestPoint() {
     const [navigationRoute, setNavigationRoute] = useState<any>(null);
     const [isNavigating, setIsNavigating] = useState(false);
     const gpsWatchIdRef = useRef<number | null>(null);
+    const locationCacheRef = useRef<{ [key: string]: string }>({});
 
-    // Helper: Get location name from coordinates
+    // Helper: Get location name from coordinates with caching
     const getLocationName = async (lat: number, lon: number): Promise<string> => {
+        // Create cache key (rounded to 3 decimal places to avoid excessive API calls)
+        const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+        
+        // Return cached result if available
+        if (locationCacheRef.current[cacheKey]) {
+            return locationCacheRef.current[cacheKey];
+        }
+
         try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+            // Request in English and fallback to English names
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=en&namedetails=1`,
+                { headers: { 'Accept-Language': 'en' } }
+            );
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error: ${response.status}`);
+            }
+            
             const data = await response.json();
+            
+            if (!data || !data.address) {
+                return "Location unavailable";
+            }
+            
             const addr = data.address;
             
-            // Build a friendly location name
-            const city = addr.city || addr.town || addr.village || addr.county;
-            const state = addr.state;
+            // Extract location components - prioritize area/neighborhood for specificity
+            const area = addr.suburb || addr.neighbourhood || addr.hamlet;
+            const city = addr.city || addr.town || addr.village || addr.county || addr.municipality;
+            const state = addr.state || addr.province;
             const country = addr.country;
             
-            if (city && state) {
-                return `${city}, ${state}`;
+            // Build a friendly location name with area if available
+            let locationName: string;
+            if (area && city && state) {
+                locationName = `${area}, ${city}, ${state}`;
+            } else if (city && state) {
+                locationName = `${city}, ${state}`;
+            } else if (city && country) {
+                locationName = `${city}, ${country}`;
             } else if (city) {
-                return city;
+                locationName = city;
+            } else if (state && country) {
+                locationName = `${state}, ${country}`;
             } else if (state) {
-                return state;
+                locationName = state;
             } else if (country) {
-                return country;
+                locationName = country;
             } else {
-                return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                locationName = "Location unavailable";
             }
+            
+            // Cache the result
+            locationCacheRef.current[cacheKey] = locationName;
+            return locationName;
         } catch (e) {
             console.error("Reverse geocoding failed:", e);
-            return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            return "Unable to resolve location";
         }
     };
 
     // Get user's current location
     useEffect(() => {
-        if (navigator.geolocation) {
+        const fetchLocation = async () => {
+            setIsLocationLoading(true);
+            setUserLocationName("Fetching location...");
+
+            if (!navigator.geolocation) {
+                setUserLocationName("GPS not supported - Using default location");
+                const defaultCoords: [number, number] = [13.0827, 80.2707];
+                setUserLocation(defaultCoords);
+                const name = await getLocationName(defaultCoords[0], defaultCoords[1]);
+                setUserLocationName(name || "Chennai, Tamil Nadu");
+                setIsLocationLoading(false);
+                return;
+            }
+
             navigator.geolocation.getCurrentPosition(
                 async (pos) => {
                     const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
                     setUserLocation(coords);
                     
-                    // Get location name
+                    // Get human-readable location name
+                    setUserLocationName("Resolving place name...");
                     const locationName = await getLocationName(coords[0], coords[1]);
                     setUserLocationName(locationName);
+                    setIsLocationLoading(false);
                 },
-                (err) => {
-                    // Suppress GPS error spam, use fallback
-                    if (err.code === 1) {
-                        setUserLocationName("Location Denied - Using Default");
-                    } else {
-                        setUserLocationName("GPS Unavailable - Using Default");
-                    }
+                async (err) => {
+                    console.warn("GPS Error:", err.message);
+                    
                     // Fallback to Chennai default location
                     const defaultCoords: [number, number] = [13.0827, 80.2707];
                     setUserLocation(defaultCoords);
-                    getLocationName(defaultCoords[0], defaultCoords[1]).then(setUserLocationName);
+                    
+                    // Show error briefly, then resolve fallback location name
+                    if (err.code === 1) {
+                        setUserLocationName("Location permission denied");
+                    } else if (err.code === 2) {
+                        setUserLocationName("GPS unavailable");
+                    } else {
+                        setUserLocationName("Location timeout");
+                    }
+                    
+                    // After short delay, show fallback location name
+                    setTimeout(async () => {
+                        const fallbackName = await getLocationName(defaultCoords[0], defaultCoords[1]);
+                        setUserLocationName(`${fallbackName} (Default)`);
+                        setIsLocationLoading(false);
+                    }, 1500);
                 },
                 { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
             );
-        } else {
-            setUserLocationName("GPS not supported");
-            // Fallback location
-            setUserLocation([13.0827, 80.2707]);
-        }
+        };
+
+        fetchLocation();
     }, []);
 
     // Search for rest points based on current location
@@ -201,12 +275,19 @@ export function RestPoint() {
                         <FitBounds coords={userLocation} />
                         
                         {/* User Location Marker */}
-                        <Marker position={userLocation} icon={userIcon}>
-                            <Popup>Your Location</Popup>
-                        </Marker>
+                        {isNavigating ? (
+                            <Marker position={userLocation} icon={navigationVehicleIcon}>
+                                <Popup>Your Current Location</Popup>
+                            </Marker>
+                        ) : (
+                            <Marker position={userLocation} icon={userIcon}>
+                                <Popup>Your Location</Popup>
+                            </Marker>
+                        )}
 
                         {/* Rest Points on Map */}
                         {results.map((point: any, idx: number) => (
+                            (!isNavigating || navigatingTo?.id === point.id) && (
                             <Marker 
                                 key={idx} 
                                 position={[point.lat, point.lon]} 
@@ -223,6 +304,7 @@ export function RestPoint() {
                                     </div>
                                 </Popup>
                             </Marker>
+                            )
                         ))}
 
                         {/* Navigation Route */}
@@ -250,21 +332,16 @@ export function RestPoint() {
                                 <label className="text-xs font-bold text-gray-500 uppercase block mb-2">
                                     <MapPin size={12} className="inline mr-1" /> Your Location
                                 </label>
-                                <div className="p-2 bg-blue-50 rounded border border-blue-200 text-sm text-gray-700">
-                                    <div className="font-semibold">{userLocationName}</div>
-                                    {userLocation && (
-                                        <div className="text-xs text-gray-500 mt-1">
-                                            {userLocation[0].toFixed(4)}, {userLocation[1].toFixed(4)}
-                                        </div>
-                                    )}
+                                <div className={`p-3 rounded-lg border text-sm ${isLocationLoading ? 'bg-gray-50 border-gray-200' : 'bg-blue-50 border-blue-200'}`}>
+                                    <div className="flex items-center gap-2">
+                                        {isLocationLoading && (
+                                            <Loader size={14} className="animate-spin text-blue-500 flex-shrink-0" />
+                                        )}
+                                        <span className={`font-semibold ${isLocationLoading ? 'text-gray-500' : 'text-gray-700'}`}>
+                                            {userLocationName}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Rest Point Type</label>
-                                <Select disabled>
-                                    <option>All Types (Coffee Shop, Petrol Pump, Toll Plaza)</option>
-                                </Select>
                             </div>
 
                             {!isNavigating ? (
@@ -300,6 +377,7 @@ export function RestPoint() {
                         ) : results.length > 0 ? (
                             <div className="space-y-3">
                                 {results.map((spot: any, idx: number) => (
+                                    (!isNavigating || navigatingTo?.id === spot.id) && (
                                     <div 
                                         key={idx} 
                                         className={`p-4 cursor-pointer transition-all border-2 rounded-lg ${selectedRestPoint?.id === spot.id ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-blue-300'}`}
@@ -333,6 +411,7 @@ export function RestPoint() {
                                             </Button>
                                         </div>
                                     </div>
+                                    )
                                 ))}
                             </div>
                         ) : (
@@ -347,7 +426,7 @@ export function RestPoint() {
 
             {/* Live Navigation Status */}
             {isNavigating && navigatingTo && (
-                <div className="fixed bottom-4 left-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-pulse">
+                <div className="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-pulse">
                     <Navigation size={20} />
                     <span className="font-bold">Live Navigation to {navigatingTo.name}</span>
                 </div>
