@@ -6,7 +6,30 @@ using System.Security.Cryptography;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. SETUP SERVICES
-builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite("Data Source=climaroute.db"));
+
+// Database Configuration - PostgreSQL for Production, SQLite for Development
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var usePostgres = !string.IsNullOrEmpty(connectionString) && connectionString.Contains("Host=");
+
+builder.Services.AddDbContext<AppDbContext>(options => {
+    if (usePostgres)
+    {
+        // Production: PostgreSQL
+        options.UseNpgsql(connectionString);
+        Console.WriteLine("📦 Using PostgreSQL database");
+    }
+    else
+    {
+        // Development: SQLite (fallback)
+        options.UseSqlite("Data Source=climaroute.db");
+        Console.WriteLine("📦 Using SQLite database (development mode)");
+    }
+});
+
+// AI Service URL Configuration
+var aiServiceUrl = builder.Configuration["AI_SERVICE_URL"] ?? "http://127.0.0.1:5001";
+Console.WriteLine($"🤖 AI Service URL: {aiServiceUrl}");
+
 builder.Services.AddCors(options => {
     options.AddPolicy("AllowReact", policy => 
         policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
@@ -123,6 +146,23 @@ using (var scope = app.Services.CreateScope())
 
 // 3. API ENDPOINTS
 
+// --- HEALTH CHECK (Required for Docker/Kubernetes) ---
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
+
+app.MapGet("/ready", async (IHttpClientFactory clientFactory) => {
+    var http = clientFactory.CreateClient();
+    try {
+        // Check if AI service is reachable
+        var aiResponse = await http.GetAsync($"{aiServiceUrl}/health");
+        if (aiResponse.IsSuccessStatusCode) {
+            return Results.Ok(new { status = "ready", ai_service = "connected" });
+        }
+        return Results.Json(new { status = "degraded", ai_service = "unavailable" }, statusCode: 503);
+    } catch {
+        return Results.Json(new { status = "degraded", ai_service = "unreachable" }, statusCode: 503);
+    }
+});
+
 // --- WEATHER (REAL-TIME VIA PYTHON) ---
 app.MapGet("/api/weather", async (HttpRequest req, IHttpClientFactory clientFactory) => {
     var http = clientFactory.CreateClient();
@@ -141,7 +181,7 @@ app.MapGet("/api/weather", async (HttpRequest req, IHttpClientFactory clientFact
 
     try {
         // Call Python Microservice
-        var response = await http.PostAsync("http://127.0.0.1:5001/weather_details", content);
+        var response = await http.PostAsync($"{aiServiceUrl}/weather_details", content);
 
         if (response.IsSuccessStatusCode) {
             // Pass Python's JSON directly to Frontend
@@ -218,7 +258,7 @@ app.MapPost("/api/optimize", async (RouteRequest req, IHttpClientFactory clientF
                 try {
                     var payload = new { latitude = midPoint[1], longitude = midPoint[0] };
                     var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-                    var aiRes = await http.PostAsync("http://127.0.0.1:5001/predict_score", content);
+                    var aiRes = await http.PostAsync($"{aiServiceUrl}/predict_score", content);
                     if (aiRes.IsSuccessStatusCode) {
                         var aiData = JsonSerializer.Deserialize<PythonResponse>(await aiRes.Content.ReadAsStringAsync());
                         score = aiData?.safety_score ?? 80;

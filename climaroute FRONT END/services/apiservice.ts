@@ -223,7 +223,11 @@ export const apiService = {
     try {
       let url = `${API_URL}/fleet/locations`;
       const params: string[] = [];
-      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);\n      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);\n      if (params.length > 0) url += `?${params.join('&')}`;\n      \n      const response = await fetch(url);
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch fleet locations');
       return await response.json();
     } catch (err) {
@@ -237,7 +241,11 @@ export const apiService = {
     try {
       let url = `${API_URL}/fleet/realtime`;
       const params: string[] = [];
-      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);\n      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);\n      if (params.length > 0) url += `?${params.join('&')}`;\n      \n      const response = await fetch(url);
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch real-time fleet data');
       return await response.json();
     } catch (err) {
@@ -251,7 +259,11 @@ export const apiService = {
     try {
       let url = `${API_URL}/fleet/active`;
       const params: string[] = [];
-      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);\n      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);\n      if (params.length > 0) url += `?${params.join('&')}`;\n      \n      const response = await fetch(url);
+      if (userEmail) params.push(`email=${encodeURIComponent(userEmail)}`);
+      if (userRole) params.push(`role=${encodeURIComponent(userRole)}`);
+      if (params.length > 0) url += `?${params.join('&')}`;
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch active fleet data');
       return await response.json();
     } catch (err) {

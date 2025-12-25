@@ -1,0 +1,70 @@
+# Docker Compose for Local Development
+# Use: docker-compose -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # DATABASE - PostgreSQL (matches production)
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    container_name: climaroute-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: climaroute
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - climaroute-dev-network
+
+  # ===========================================
+  # AI SERVICE - Weather Prediction Model
+  # ===========================================
+  ai-service:
+    build:
+      context: ./AI_Model
+      dockerfile: Dockerfile
+    container_name: climaroute-ai-dev
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      # Mount source for hot reload during development
+      - ./AI_Model:/app:ro
+    environment:
+      - MODEL_PATH=/app/rainfall_model.keras
+      - SCALER_PATH=/app/scaler.gz
+    networks:
+      - climaroute-dev-network
+
+  # ===========================================
+  # ADMINER - Database GUI (Dev only)
+  # ===========================================
+  adminer:
+    image: adminer
+    container_name: climaroute-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - climaroute-dev-network
+
+networks:
+  climaroute-dev-network:
+    driver: bridge
+
+volumes:
+  postgres_dev_data:
+    driver: local

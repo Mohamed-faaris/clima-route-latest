@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # DATABASE - PostgreSQL (Production-ready)
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    container_name: climaroute-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: climaroute
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - climaroute-network
+
+  # ===========================================
+  # AI SERVICE - Weather Prediction Model
+  # ===========================================
+  ai-service:
+    build:
+      context: ./AI_Model
+      dockerfile: Dockerfile
+    container_name: climaroute-ai
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      - MODEL_PATH=/app/rainfall_model.keras
+      - SCALER_PATH=/app/scaler.gz
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s  # Give model time to load
+      retries: 3
+    networks:
+      - climaroute-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # TensorFlow needs memory
+
+  # ===========================================
+  # BACKEND - .NET API Server
+  # ===========================================
+  backend:
+    build:
+      context: ./BACKEND
+      dockerfile: Dockerfile
+    container_name: climaroute-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - AI_SERVICE_URL=http://ai-service:5001
+      - ConnectionStrings__DefaultConnection=Host=db;Database=climaroute;Username=postgres;Password=${DB_PASSWORD:-postgres}
+    depends_on:
+      db:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - climaroute-network
+
+  # ===========================================
+  # FRONTEND - React/Vite with Nginx
+  # ===========================================
+  frontend:
+    build:
+      context: ./climaroute FRONT END
+      dockerfile: Dockerfile
+    container_name: climaroute-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - climaroute-network
+
+# ===========================================
+# NETWORKS & VOLUMES
+# ===========================================
+networks:
+  climaroute-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
