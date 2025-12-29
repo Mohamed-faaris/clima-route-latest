@@ -30,13 +30,28 @@ builder.Services.AddDbContext<AppDbContext>(options => {
 var aiServiceUrl = builder.Configuration["AI_SERVICE_URL"] ?? "http://127.0.0.1:5001";
 Console.WriteLine($"🤖 AI Service URL: {aiServiceUrl}");
 
+// Host URL Configuration
+var hostUrl = builder.Configuration["HOST_URL"] ?? "http://localhost:5000";
+Console.WriteLine($"🏠 Host URL: {hostUrl}");
+
+// CORS Configuration
+var allowedOrigins = builder.Configuration["ALLOWED_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? new[] { "*" };
+Console.WriteLine($"🌐 Allowed Origins: {string.Join(", ", allowedOrigins)}");
+
 builder.Services.AddCors(options => {
-    options.AddPolicy("AllowReact", policy => 
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    options.AddPolicy("AllowReact", policy => {
+        policy.SetIsOriginAllowed(_ => true) // Allow any origin
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
 });
 builder.Services.AddHttpClient(); 
+builder.Services.AddControllers();
 
 var app = builder.Build();
+
+app.UseRouting();
 app.UseCors("AllowReact");
 
 // 2. DATABASE INIT - ENSURE PERSISTENCE
@@ -146,8 +161,16 @@ using (var scope = app.Services.CreateScope())
 
 // 3. API ENDPOINTS
 
+// Root API check
+app.MapMethods("/api", new[] { "GET", "POST", "PUT", "DELETE", "OPTIONS" }, () => Results.Ok(new { 
+    message = "Climate Route API is working", 
+    status = "online",
+    methods_allowed = "GET, POST, PUT, DELETE, OPTIONS"
+}));
+
 // --- HEALTH CHECK (Required for Docker/Kubernetes) ---
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 app.MapGet("/ready", async (IHttpClientFactory clientFactory) => {
     var http = clientFactory.CreateClient();
@@ -1574,7 +1597,8 @@ app.MapPost("/api/rest-points", async (IHttpClientFactory clientFactory, RestPoi
     }
 });
 
-app.Run("http://localhost:5000");
+app.MapControllers();
+app.Run();
 
 // Utility: Calculate distance between two coordinates (Haversine formula)
 static double CalculateDistance(double lat1, double lon1, double lat2, double lon2) {

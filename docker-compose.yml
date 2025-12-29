@@ -64,7 +64,10 @@ services:
       - "5000:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5000
       - AI_SERVICE_URL=http://ai-service:5001
+      - HOST_URL=${HOST_URL:-http://localhost:5000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:80,http://localhost}
       - ConnectionStrings__DefaultConnection=Host=db;Database=climaroute;Username=postgres;Password=${DB_PASSWORD:-postgres}
     depends_on:
       db:
@@ -86,6 +89,8 @@ services:
     build:
       context: ./climaroute FRONT END
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:5000/api}
     container_name: climaroute-frontend
     restart: always
     ports:
