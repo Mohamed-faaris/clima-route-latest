@@ -90,7 +90,7 @@ services:
       context: ./climaroute FRONT END
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=/api
+        - VITE_API_URL=http://3.238.234.41/api
     container_name: climaroute-frontend
     restart: always
     ports:
