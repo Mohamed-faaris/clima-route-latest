@@ -1,5 +1,30 @@
 // <reference types="vite/client" />
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+// Determine API URL - prioritize relative path for Docker/Nginx deployment
+const getApiUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  
+  // If running in browser and VITE_API_URL is a full external URL with different host,
+  // use it as-is. Otherwise, use relative path for Nginx proxy.
+  if (envUrl) {
+    try {
+      const envUrlObj = new URL(envUrl);
+      const currentHost = window.location.hostname;
+      // If the API URL hostname is different from current host, use full URL
+      if (envUrlObj.hostname !== currentHost && envUrlObj.hostname !== 'localhost' && envUrlObj.hostname !== '127.0.0.1') {
+        return envUrl;
+      }
+    } catch (e) {
+      // If it's not a valid URL, it might be a relative path
+      if (envUrl.startsWith('/')) return envUrl;
+    }
+  }
+  
+  // Default: use relative path for Nginx proxy
+  return '/api';
+};
+
+const API_URL = getApiUrl();
 
 // Helper: Get current logged-in user info from localStorage
 export const getCurrentUser = (): { email: string; role: string } => {
@@ -19,7 +44,7 @@ export const getCurrentUser = (): { email: string; role: string } => {
   }
 };
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = API_URL;
 
 export const apiService = {
   get: async (url: string) => {
