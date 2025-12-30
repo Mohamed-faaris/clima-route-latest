@@ -17,6 +17,11 @@ export HOST_URL="${SERVER_URL}:5000"
 export ALLOWED_ORIGINS="${SERVER_URL},${SERVER_URL}:80,http://localhost,http://localhost:80"
 export VITE_API_URL="${SERVER_URL}:5000/api"
 
+# Ensure the VITE_API_URL has proper http:// or https://
+if [[ ! "${VITE_API_URL}" =~ ^https?:// ]]; then
+  export VITE_API_URL="http://${VITE_API_URL}"
+fi
+
 echo ""
 echo "🌍 Configuration:"
 echo "   - Host URL: $HOST_URL"

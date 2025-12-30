@@ -64,7 +64,7 @@ using (var scope = app.Services.CreateScope())
     
     // Add VehicleId column if it doesn't exist (for existing databases)
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN VehicleId TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN \"VehicleId\" TEXT DEFAULT ''");
         Console.WriteLine("Added VehicleId column to Users table");
     } catch {
         // Column already exists, ignore
@@ -72,42 +72,42 @@ using (var scope = app.Services.CreateScope())
     
     // Add new SosAlert columns if they don't exist
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE SosAlerts ADD COLUMN DriverName TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"DriverName\" TEXT DEFAULT ''");
         Console.WriteLine("Added DriverName column to SosAlerts table");
     } catch { }
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE SosAlerts ADD COLUMN CreatedAt TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"CreatedAt\" TEXT DEFAULT ''");
         Console.WriteLine("Added CreatedAt column to SosAlerts table");
     } catch { }
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE SosAlerts ADD COLUMN ResolvedAt TEXT");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"ResolvedAt\" TEXT");
         Console.WriteLine("Added ResolvedAt column to SosAlerts table");
     } catch { }
     
     // Add new Notification columns for alert types
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Notifications ADD COLUMN Type TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"Type\" TEXT DEFAULT ''");
         Console.WriteLine("Added Type column to Notifications table");
     } catch { }
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Notifications ADD COLUMN Severity TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"Severity\" TEXT DEFAULT ''");
         Console.WriteLine("Added Severity column to Notifications table");
     } catch { }
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Notifications ADD COLUMN UserEmail TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"UserEmail\" TEXT DEFAULT ''");
         Console.WriteLine("Added UserEmail column to Notifications table");
     } catch { }
     
     // Add UserEmail column to Weathers table for user-specific weather data
     try {
-        db.Database.ExecuteSqlRaw("ALTER TABLE Weathers ADD COLUMN UserEmail TEXT DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Weathers\" ADD COLUMN \"UserEmail\" TEXT DEFAULT ''");
         Console.WriteLine("Added UserEmail column to Weathers table");
     } catch { }
     
     // Fix old SosAlerts with empty CreatedAt - set to current UTC time
     try {
         var now = DateTime.UtcNow.ToString("o"); // ISO 8601 format
-        db.Database.ExecuteSqlRaw($"UPDATE SosAlerts SET CreatedAt = '{now}' WHERE CreatedAt IS NULL OR CreatedAt = ''");
+        db.Database.ExecuteSqlRaw($"UPDATE \"SosAlerts\" SET \"CreatedAt\" = '{now}' WHERE \"CreatedAt\" IS NULL OR \"CreatedAt\" = ''");
         Console.WriteLine("Fixed empty CreatedAt values in SosAlerts table");
     } catch (Exception ex) {
         Console.WriteLine($"Note: Could not fix CreatedAt values: {ex.Message}");
