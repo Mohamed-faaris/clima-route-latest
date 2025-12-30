@@ -25,11 +25,11 @@ echo "------------------------------------------"
 
 # 3. Start Services
 echo "🚀 Starting 3 main services (AI, Backend, Frontend) + Database..."
-docker compose up -d --build
+docker-compose up -d --build
 
 # 4. Show Logs
 echo ""
 echo "✅ Services started successfully!"
 echo "📺 Attaching to logs (Press Ctrl+C to exit logs, services will remain running)..."
 echo "------------------------------------------"
-docker compose logs -f
+docker-compose logs -f
