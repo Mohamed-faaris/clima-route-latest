@@ -147,7 +147,7 @@ Clima_Route/
    - Ensure Docker is installed.
    - Run:
      ```sh
-     docker-compose up --build
+     docker compose up --build
      ```
    - This will build and start all services (AI Model, Backend, Frontend).
 
@@ -183,7 +183,7 @@ Clima_Route/
 ---
 
 ## Troubleshooting
-- Check container logs with `docker-compose logs`.
+- Check container logs with `docker compose logs`.
 - Ensure ports are not blocked or in use.
 - For development, use `docker-compose.dev.yml`.
 
