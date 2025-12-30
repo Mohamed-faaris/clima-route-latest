@@ -17,7 +17,7 @@ if (-not $docker) {
 
 # Start services
 Write-Host "`n📦 Starting database and AI service..." -ForegroundColor Green
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
 Write-Host "`n⏳ Waiting for services to be ready..." -ForegroundColor Yellow
 Start-Sleep -Seconds 10
@@ -47,5 +47,5 @@ Write-Host "To start Frontend manually:" -ForegroundColor White
 Write-Host "  cd 'climaroute FRONT END' && npm run dev" -ForegroundColor Gray
 Write-Host ""
 Write-Host "To stop all services:" -ForegroundColor White
-Write-Host "  docker-compose -f docker-compose.dev.yml down" -ForegroundColor Gray
+Write-Host "  docker compose -f docker-compose.dev.yml down" -ForegroundColor Gray
 Write-Host ""

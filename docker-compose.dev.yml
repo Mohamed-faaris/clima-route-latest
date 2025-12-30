@@ -1,5 +1,5 @@
 # Docker Compose for Local Development
-# Use: docker-compose -f docker-compose.dev.yml up
+# Use: docker compose -f docker-compose.dev.yml up
 
 version: '3.8'
 

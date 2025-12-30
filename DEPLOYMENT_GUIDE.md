@@ -38,13 +38,13 @@
 
 ```bash
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop all services
-docker-compose down
+docker compose down
 ```
 
 ### Option 2: Development Mode
@@ -166,7 +166,7 @@ services:
 
 ```bash
 # Check logs
-docker-compose logs ai-service
+docker compose logs ai-service
 
 # Verify model files exist
 ls AI_Model/rainfall_model.keras
@@ -177,7 +177,7 @@ ls AI_Model/scaler.gz
 
 ```bash
 # Check if PostgreSQL is running
-docker-compose ps db
+docker compose ps db
 
 # Test connection
 psql -h localhost -U postgres -d climaroute
@@ -187,24 +187,24 @@ psql -h localhost -U postgres -d climaroute
 
 ```bash
 # Check network connectivity
-docker-compose exec backend curl http://ai-service:5001/health
+docker compose exec backend curl http://ai-service:5001/health
 ```
 
 ## 📋 Maintenance Commands
 
 ```bash
 # View all logs
-docker-compose logs -f
+docker compose logs -f
 
 # Restart specific service
-docker-compose restart ai-service
+docker compose restart ai-service
 
 # Rebuild after code changes
-docker-compose build --no-cache
-docker-compose up -d
+docker compose build --no-cache
+docker compose up -d
 
 # Clean up everything
-docker-compose down -v --rmi all
+docker compose down -v --rmi all
 ```
 
 ## 🎯 Production Checklist
