@@ -813,16 +813,4 @@ export const apiService = {
       return { restPoints: [] };
     }
   },
-
-  // GET DELIVERY HISTORY - filtered by user
-  getHistory: async (params?: any) => {
-    let url = '/history';
-    if (params) {
-      const query = typeof params === 'string'
-        ? params
-        : new URLSearchParams(params).toString();
-      url += '?' + query;
-    }
-    return apiService.get(url); // or your actual fetch logic
-  },
 };
