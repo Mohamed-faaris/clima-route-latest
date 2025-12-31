@@ -74,6 +74,21 @@ docker compose up -d --build
 
 - Set in `.env` file
 - Variables: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DB_HOST`, `DB_PORT`
+- **New:** `DATABASE_URL` for external databases (Neon DB, AWS RDS).
+
+### External Database Support (Neon DB)
+
+You can now easily switch to an external database like Neon DB without modifying `docker-compose.yml`.
+
+1.  Get your connection string from Neon DB.
+2.  Add it to your `.env` file:
+    ```env
+    DATABASE_URL=Host=ep-cool-darkness-123456.us-east-2.aws.neon.tech;Database=neondb;Username=alex;Password=your_password;SSL Mode=Require
+    ```
+3.  Restart the backend:
+    ```bash
+    docker compose up -d backend
+    ```
 
 ### Backend Configuration
 

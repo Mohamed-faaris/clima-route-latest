@@ -32,8 +32,20 @@ This document explains all environment variables used in the Clima Route applica
 | `POSTGRES_DB`       | Database name            | `climaroute` | Yes                         |
 | `DB_HOST`           | Database host (internal) | `db`         | Yes                         |
 | `DB_PORT`           | Database port            | `5432`       | Yes                         |
+| `DATABASE_URL`      | Full Connection String   | (empty)      | No (Overrides above)        |
 
 **Production Security Note:** Always use a strong, unique password for `POSTGRES_PASSWORD` in production!
+
+### External Database (Neon DB, AWS RDS, etc.)
+
+If you want to use an external database like **Neon DB**, you can provide the full connection string in `DATABASE_URL`. This will override the individual `POSTGRES_*` and `DB_*` variables for the backend.
+
+**Neon DB Example:**
+```env
+DATABASE_URL=Host=ep-cool-darkness-123456.us-east-2.aws.neon.tech;Database=neondb;Username=alex;Password=your_password;SSL Mode=Require
+```
+
+**Note:** When using an external database, you can disable the local `db` service in `docker-compose.yml` or simply ignore it. The backend will connect to the URL provided in `DATABASE_URL`.
 
 ### Backend API Configuration
 

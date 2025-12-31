@@ -34,6 +34,7 @@ export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
 export POSTGRES_DB="${POSTGRES_DB:-climaroute}"
 export DB_HOST="${DB_HOST:-db}"
 export DB_PORT="${DB_PORT:-5432}"
+export DATABASE_URL="${DATABASE_URL:-}"
 
 # Note: Frontend uses relative path /api for Nginx proxy (no need for external URL in Docker)
 export VITE_API_URL="${VITE_API_URL:-/api}"
@@ -46,9 +47,14 @@ echo "   - Frontend API: $VITE_API_URL (via Nginx proxy)"
 echo "   - Backend Port: $BACKEND_PORT"
 echo "   - Frontend Port: $FRONTEND_PORT"
 echo "   - AI Service Port: $AI_SERVICE_PORT"
-echo "   - Database: PostgreSQL"
-echo "   - DB User: $POSTGRES_USER"
-echo "   - DB Name: $POSTGRES_DB"
+
+if [ ! -z "$DATABASE_URL" ]; then
+    echo "   - Database: External (via DATABASE_URL)"
+else
+    echo "   - Database: Local PostgreSQL ($DB_HOST:$DB_PORT)"
+    echo "   - DB User: $POSTGRES_USER"
+    echo "   - DB Name: $POSTGRES_DB"
+fi
 echo "------------------------------------------"
 
 # 3. Start Services

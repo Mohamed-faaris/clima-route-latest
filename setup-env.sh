@@ -51,9 +51,29 @@ fi
 # Update .env
 sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$DB_PASS/" .env
 
+# Database Type
+echo ""
+echo "2️⃣  Database Type"
+echo "   1) Local Docker PostgreSQL (Default)"
+echo "   2) External PostgreSQL (Neon DB, AWS RDS, etc.)"
+read -p "Select database type (1-2) [1]: " DB_TYPE
+
+if [ "$DB_TYPE" == "2" ]; then
+    echo ""
+    echo "   Enter your full connection string (Entity Framework format)"
+    echo "   Example: Host=your-host;Database=your-db;Username=your-user;Password=your-pass;SSL Mode=Require"
+    read -p "   Connection String: " DB_URL
+    if [ ! -z "$DB_URL" ]; then
+        sed -i "s|DATABASE_URL=.*|DATABASE_URL=$DB_URL|" .env
+        echo "   ✅ External database configured"
+    fi
+else
+    echo "   ✅ Using local Docker database"
+fi
+
 # JWT Secret
 echo ""
-echo "2️⃣  JWT Secret"
+echo "3️⃣  JWT Secret"
 echo "   (Leave empty to generate a random secure secret)"
 read -p "Enter JWT secret: " -s JWT_SEC
 echo ""
@@ -73,7 +93,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # Environment
 echo ""
-echo "3️⃣  Environment"
+echo "4️⃣  Environment"
 echo "   1) Production"
 echo "   2) Development"
 echo "   3) Staging"
@@ -109,7 +129,7 @@ echo "   ✅ Environment set to: $ASPNET_ENV"
 
 # Server URL
 echo ""
-echo "4️⃣  Server URL"
+echo "5️⃣  Server URL"
 echo "   Examples:"
 echo "   - http://localhost (for local)"
 echo "   - http://192.168.1.100 (for LAN)"
@@ -137,7 +157,7 @@ echo "🤖 Optional Services"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 echo ""
-echo "5️⃣  Gemini API Key (optional - for AI features)"
+echo "6️⃣  Gemini API Key (optional - for AI features)"
 read -p "Enter Gemini API key (or leave empty to skip): " GEMINI_KEY
 
 if [ ! -z "$GEMINI_KEY" ]; then
