@@ -12,13 +12,13 @@ services:
     container_name: climaroute-db-dev
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: devpassword
-      POSTGRES_DB: climaroute
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-climaroute}
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -37,13 +37,16 @@ services:
     container_name: climaroute-ai-dev
     restart: unless-stopped
     ports:
-      - "5001:5001"
+      - "${AI_SERVICE_PORT:-5001}:5001"
     volumes:
       # Mount source for hot reload during development
       - ./AI_Model:/app:ro
     environment:
-      - MODEL_PATH=/app/rainfall_model.keras
-      - SCALER_PATH=/app/scaler.gz
+      - MODEL_PATH=${MODEL_PATH:-/app/rainfall_model.keras}
+      - SCALER_PATH=${SCALER_PATH:-/app/scaler.gz}
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - FLASK_DEBUG=${FLASK_DEBUG:-1}
+      - WEATHER_API_URL=${WEATHER_API_URL:-https://api.open-meteo.com/v1/forecast}
     networks:
       - climaroute-dev-network
 
@@ -55,7 +58,7 @@ services:
     container_name: climaroute-adminer
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${ADMINER_PORT:-8080}:8080"
     depends_on:
       - db
     networks:

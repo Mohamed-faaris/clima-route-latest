@@ -22,11 +22,9 @@ WORKDIR /app
 # Copy published output
 COPY --from=build /app/publish .
 
-# Environment variables
+# Environment variables (can be overridden by docker-compose)
 ENV ASPNETCORE_URLS=http://+:5000
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV AI_SERVICE_URL=http://ai-service:5001
-ENV ConnectionStrings__DefaultConnection="Host=db;Database=climaroute;Username=postgres;Password=postgres"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

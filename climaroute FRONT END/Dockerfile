@@ -5,7 +5,9 @@ WORKDIR /app
 
 # Accept build arguments
 ARG VITE_API_URL
+ARG GEMINI_API_KEY
 ENV VITE_API_URL=$VITE_API_URL
+ENV GEMINI_API_KEY=$GEMINI_API_KEY
 
 # Copy package files
 COPY package.json package-lock.json* ./

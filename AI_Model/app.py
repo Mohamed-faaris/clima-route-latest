@@ -18,8 +18,9 @@ CORS(app)  # Enable CORS for all routes
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'rainfall_model.keras')
-SCALER_PATH = os.path.join(BASE_DIR, 'scaler.gz')
+MODEL_PATH = os.getenv('MODEL_PATH', os.path.join(BASE_DIR, 'rainfall_model.keras'))
+SCALER_PATH = os.getenv('SCALER_PATH', os.path.join(BASE_DIR, 'scaler.gz'))
+WEATHER_API_URL = os.getenv('WEATHER_API_URL', 'https://api.open-meteo.com/v1/forecast')
 
 FEATURE_COLS = ['temperature_2m', 'relative_humidity_2m', 'dew_point_2m', 
                 'surface_pressure', 'cloud_cover', 'wind_speed_10m', 
@@ -45,7 +46,7 @@ else:
 
 # --- HELPER: Fetch Weather ---
 def get_real_weather(lat, lon):
-    url = "https://api.open-meteo.com/v1/forecast"
+    url = WEATHER_API_URL
     params = {
         "latitude": lat, "longitude": lon,
         "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,cloud_cover,wind_speed_10m,weather_code",
