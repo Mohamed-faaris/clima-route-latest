@@ -102,8 +102,7 @@ CREATE TABLE IF NOT EXISTS "SosRecords" (
     "ResolvedAt" TEXT
 );
 
-CREATE INDEX IF NOT EXISTS ix_sosrecords_userid_status
-ON "SosRecords" ("UserId", "Status");
+CREATE INDEX IF NOT EXISTS ix_sosrecords_userid_status ON "SosRecords" ("UserId", "Status");
 
 -- ============================
 -- WEATHERS
@@ -126,24 +125,32 @@ CREATE TABLE IF NOT EXISTS "Weathers" (
 -- Updated to user-provided hash
 -- ============================
 
-INSERT INTO "Users" ("Email", "Password", "PlainPassword", "Name", "Phone", "Role", "Status")
-VALUES
-(
-    'Admin@dev.com',
-    '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
-    'Admin@123',
-    'Admin User',
-    '9999999999',
-    'ADMIN',
-    'ACTIVE'
-),
-(
-    'Driver@dev.com',
-    '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
-    'Driver@123',
-    'Driver User',
-    '8888888888',
-    'DRIVER',
-    'ACTIVE'
-)
+INSERT INTO
+    "Users" (
+        "Email",
+        "Password",
+        "PlainPassword",
+        "Name",
+        "Phone",
+        "Role",
+        "Status"
+    )
+VALUES (
+        'Admin@dev.com',
+        '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
+        'Admin@123',
+        'Admin User',
+        '9999999999',
+        'ADMIN',
+        'ACTIVE'
+    ),
+    (
+        'Driver@dev.com',
+        '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
+        'Driver@123',
+        'Driver User',
+        '8888888888',
+        'DRIVER',
+        'ACTIVE'
+    )
 ON CONFLICT ("Email") DO NOTHING;
