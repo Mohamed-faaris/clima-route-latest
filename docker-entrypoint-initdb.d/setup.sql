@@ -123,15 +123,14 @@ CREATE TABLE IF NOT EXISTS "Weathers" (
 -- ============================
 -- SEED USERS
 -- Passwords:
--- Admin@123
--- Driver@123
+-- Updated to user-provided hash
 -- ============================
 
 INSERT INTO "Users" ("Email", "Password", "PlainPassword", "Name", "Phone", "Role", "Status")
 VALUES
 (
     'Admin@dev.com',
-    '$2b$10$Qe3Z9zv0M9WQp4G8g1JwOeH8y6Z1JrZzZ8l5dZcZKkZr7F6pQJz4W',
+    '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
     'Admin@123',
     'Admin User',
     '9999999999',
@@ -140,7 +139,7 @@ VALUES
 ),
 (
     'Driver@dev.com',
-    '$2b$10$XJ1Cq1ZyJ6vKp8WmRk7ZWeA9FQYFQqPZy8xY3mGk6y9Y0pQmQZ3eK',
+    '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
     'Driver@123',
     'Driver User',
     '8888888888',
