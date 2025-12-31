@@ -94,18 +94,18 @@ services:
 
   # ===========================================
   # FRONTEND - React/Vite with Nginx
-  # ===================${VITE_API_URL:-/api}
+  # ===========================================
+  frontend:
+    build:
+      context: ./climaroute FRONT END
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-/api}
         - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     container_name: climaroute-frontend
     restart: always
     ports:
-      - "${FRONTEND_PORT:-80}rfile: Dockerfile
-      args:
-        - VITE_API_URL=http://3.238.234.41/api
-    container_name: climaroute-frontend
-    restart: always
-    ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       - backend
     healthcheck:

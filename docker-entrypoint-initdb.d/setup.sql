@@ -1,123 +1,123 @@
 -- ============================
--- USERS
+-- USERS (Quoted for case-sensitive matching)
 -- ============================
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
-    password TEXT NOT NULL,
-    plain_password TEXT NOT NULL,
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    role TEXT NOT NULL,
-    status TEXT NOT NULL,
-    vehicle_id TEXT DEFAULT ''
+CREATE TABLE IF NOT EXISTS "Users" (
+    "Id" SERIAL PRIMARY KEY,
+    "Email" TEXT NOT NULL UNIQUE,
+    "Password" TEXT NOT NULL,
+    "PlainPassword" TEXT NOT NULL,
+    "Name" TEXT NOT NULL,
+    "Phone" TEXT NOT NULL,
+    "Role" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "VehicleId" TEXT DEFAULT ''
 );
 
 -- ============================
 -- USER SETTINGS
 -- ============================
-CREATE TABLE IF NOT EXISTS user_settings (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    temperature_unit TEXT NOT NULL,
-    distance_unit TEXT NOT NULL,
-    time_format TEXT NOT NULL,
-    language TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS "UserSettings" (
+    "Id" SERIAL PRIMARY KEY,
+    "UserId" INTEGER NOT NULL,
+    "TemperatureUnit" TEXT NOT NULL,
+    "DistanceUnit" TEXT NOT NULL,
+    "TimeFormat" TEXT NOT NULL,
+    "Language" TEXT NOT NULL,
+    "UpdatedAt" TEXT NOT NULL
 );
 
 -- ============================
 -- HISTORIES
 -- ============================
-CREATE TABLE IF NOT EXISTS histories (
-    id SERIAL PRIMARY KEY,
-    route_id TEXT NOT NULL,
-    date TEXT NOT NULL,
-    start_time TEXT NOT NULL,
-    end_time TEXT NOT NULL,
-    origin TEXT NOT NULL,
-    destination TEXT NOT NULL,
-    weather TEXT NOT NULL,
-    distance TEXT NOT NULL,
-    status TEXT NOT NULL,
-    driver_email TEXT NOT NULL,
-    origin_lat REAL,
-    origin_lon REAL,
-    destination_lat REAL,
-    destination_lon REAL,
-    current_lat REAL,
-    current_lon REAL,
-    eta TEXT,
-    speed REAL,
-    temperature REAL,
-    humidity INTEGER,
-    wind_speed REAL,
-    rain_probability REAL,
-    safety_score TEXT NOT NULL,
-    weather_condition TEXT NOT NULL,
-    duration REAL,
-    notes TEXT NOT NULL,
-    created_at TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS "Histories" (
+    "Id" SERIAL PRIMARY KEY,
+    "RouteId" TEXT NOT NULL,
+    "Date" TEXT NOT NULL,
+    "StartTime" TEXT NOT NULL,
+    "EndTime" TEXT NOT NULL,
+    "Origin" TEXT NOT NULL,
+    "Destination" TEXT NOT NULL,
+    "Weather" TEXT NOT NULL,
+    "Distance" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "DriverEmail" TEXT NOT NULL,
+    "OriginLat" REAL,
+    "OriginLon" REAL,
+    "DestinationLat" REAL,
+    "DestinationLon" REAL,
+    "CurrentLat" REAL,
+    "CurrentLon" REAL,
+    "Eta" TEXT,
+    "Speed" REAL,
+    "Temperature" REAL,
+    "Humidity" INTEGER,
+    "WindSpeed" REAL,
+    "RainProbability" REAL,
+    "SafetyScore" TEXT NOT NULL,
+    "WeatherCondition" TEXT NOT NULL,
+    "Duration" REAL,
+    "Notes" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL
 );
 
 -- ============================
 -- NOTIFICATIONS
 -- ============================
-CREATE TABLE IF NOT EXISTS notifications (
-    id SERIAL PRIMARY KEY,
-    category TEXT NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    type TEXT DEFAULT '',
-    severity TEXT DEFAULT '',
-    user_email TEXT DEFAULT ''
+CREATE TABLE IF NOT EXISTS "Notifications" (
+    "Id" SERIAL PRIMARY KEY,
+    "Category" TEXT NOT NULL,
+    "Title" TEXT NOT NULL,
+    "Description" TEXT NOT NULL,
+    "Timestamp" TEXT NOT NULL,
+    "Type" TEXT DEFAULT '',
+    "Severity" TEXT DEFAULT '',
+    "UserEmail" TEXT DEFAULT ''
 );
 
 -- ============================
 -- SOS ALERTS
 -- ============================
-CREATE TABLE IF NOT EXISTS sos_alerts (
-    id SERIAL PRIMARY KEY,
-    vehicle_id TEXT NOT NULL,
-    driver_email TEXT NOT NULL,
-    type TEXT NOT NULL,
-    location TEXT NOT NULL,
-    time TEXT NOT NULL,
-    is_active INTEGER NOT NULL,
-    driver_name TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    resolved_at TEXT
+CREATE TABLE IF NOT EXISTS "SosAlerts" (
+    "Id" SERIAL PRIMARY KEY,
+    "VehicleId" TEXT NOT NULL,
+    "DriverEmail" TEXT NOT NULL,
+    "Type" TEXT NOT NULL,
+    "Location" TEXT NOT NULL,
+    "Time" TEXT NOT NULL,
+    "IsActive" BOOLEAN NOT NULL,
+    "DriverName" TEXT DEFAULT '',
+    "CreatedAt" TEXT DEFAULT '',
+    "ResolvedAt" TEXT
 );
 
 -- ============================
 -- SOS RECORDS
 -- ============================
-CREATE TABLE IF NOT EXISTS sos_records (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    reason TEXT NOT NULL,
-    status TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    resolved_at TEXT
+CREATE TABLE IF NOT EXISTS "SosRecords" (
+    "Id" SERIAL PRIMARY KEY,
+    "UserId" INTEGER NOT NULL,
+    "Reason" TEXT NOT NULL,
+    "Status" TEXT NOT NULL,
+    "CreatedAt" TEXT NOT NULL,
+    "ResolvedAt" TEXT
 );
 
 CREATE INDEX IF NOT EXISTS ix_sosrecords_userid_status
-ON sos_records (user_id, status);
+ON "SosRecords" ("UserId", "Status");
 
 -- ============================
 -- WEATHERS
 -- ============================
-CREATE TABLE IF NOT EXISTS weathers (
-    id SERIAL PRIMARY KEY,
-    temperature REAL NOT NULL,
-    condition TEXT NOT NULL,
-    humidity INTEGER NOT NULL,
-    wind_speed REAL NOT NULL,
-    rain_probability REAL NOT NULL,
-    safety_score TEXT NOT NULL,
-    recorded_at TEXT NOT NULL,
-    user_email TEXT DEFAULT ''
+CREATE TABLE IF NOT EXISTS "Weathers" (
+    "Id" SERIAL PRIMARY KEY,
+    "Temperature" REAL NOT NULL,
+    "Condition" TEXT NOT NULL,
+    "Humidity" INTEGER NOT NULL,
+    "WindSpeed" REAL NOT NULL,
+    "RainProbability" REAL NOT NULL,
+    "SafetyScore" TEXT NOT NULL,
+    "RecordedAt" TEXT NOT NULL,
+    "UserEmail" TEXT DEFAULT ''
 );
 
 -- ============================
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS weathers (
 -- Driver@123
 -- ============================
 
-INSERT INTO users (email, password, plain_password, name, phone, role, status)
+INSERT INTO "Users" ("Email", "Password", "PlainPassword", "Name", "Phone", "Role", "Status")
 VALUES
 (
     'Admin@dev.com',
@@ -147,4 +147,4 @@ VALUES
     'DRIVER',
     'ACTIVE'
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT ("Email") DO NOTHING;
