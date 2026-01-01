@@ -265,8 +265,57 @@ app.MapMethods("/api", new[] { "GET", "POST", "PUT", "DELETE", "OPTIONS" }, () =
 }));
 
 // --- HEALTH CHECK (Required for Docker/Kubernetes) ---
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
+app.MapGet("/health", async (AppDbContext db) =>
+{
+    try
+    {
+        // Check database connectivity with a simple query
+        await db.Database.ExecuteSqlRawAsync("SELECT 1");
+        return Results.Ok(new
+        {
+            status = "healthy",
+            timestamp = DateTime.UtcNow,
+            database = "connected"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Database health check failed");
+        return Results.Json(new
+        {
+            status = "unhealthy",
+            timestamp = DateTime.UtcNow,
+            database = "disconnected",
+            error = ex.Message
+        }, statusCode: 503);
+    }
+});
+
+app.MapGet("/api/health", async (AppDbContext db) =>
+{
+    try
+    {
+        // Check database connectivity with a simple query
+        await db.Database.ExecuteSqlRawAsync("SELECT 1");
+        return Results.Ok(new
+        {
+            status = "healthy",
+            timestamp = DateTime.UtcNow,
+            database = "connected"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Database health check failed");
+        return Results.Json(new
+        {
+            status = "unhealthy",
+            timestamp = DateTime.UtcNow,
+            database = "disconnected",
+            error = ex.Message
+        }, statusCode: 503);
+    }
+});
 
 app.MapGet("/ready", async (IHttpClientFactory clientFactory) =>
 {
