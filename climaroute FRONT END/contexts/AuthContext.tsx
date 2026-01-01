@@ -39,7 +39,8 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     const res = await apiService.login(email, password || '');
     // res expected: { token, user: { email, name, role } }
     const u = res.user || res;
-    const userObj: User = { email: u.email, name: u.name, role: u.role === 'admin' ? 'admin' : 'user' };
+
+    const userObj: User = { email: u.email, name: u.name, role: u.role?.toLowerCase() === 'admin' ? 'admin' : 'user' };
     setUser(userObj);
     setIsAuthenticated(true);
     localStorage.setItem('clima_user', JSON.stringify(userObj));
@@ -53,7 +54,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     const res = await apiService.signup(email, name, password);
     // res expected: { token, user: { email, name, role } }
     const u = res.user || res;
-    const userObj: User = { email: u.email, name: u.name, role: u.role === 'admin' ? 'admin' : 'user' };
+    const userObj: User = { email: u.email, name: u.name, role: u.role?.toLowerCase() === 'admin' ? 'admin' : 'user' };
     setUser(userObj);
     setIsAuthenticated(true);
     localStorage.setItem('clima_user', JSON.stringify(userObj));
