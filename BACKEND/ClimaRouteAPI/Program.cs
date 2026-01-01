@@ -720,71 +720,113 @@ app.MapGet("/api/history", async (AppDbContext db, HttpRequest req) =>
 
     Console.WriteLine($"[HISTORY] Request - email: {email ?? "null"}, role: {role}");
 
-    // First load users into memory for case-insensitive lookup
-    var users = await db.Users.ToListAsync();
+    try
+    {
+        // First load users into memory for case-insensitive lookup
+        var users = await db.Users.ToListAsync();
 
-    // Build query with user filtering
-    IQueryable<DeliveryHistory> query = db.Histories;
+        // Build query with user filtering
+        IQueryable<DeliveryHistory> query = db.Histories;
 
-    // SECURITY: Non-admin users can ONLY see their own history
-    if (role != "admin" && !string.IsNullOrEmpty(email))
-    {
-        query = query.Where(h => !string.IsNullOrEmpty(h.DriverEmail) && h.DriverEmail.ToLower() == email);
-        Console.WriteLine($"[HISTORY] Filtered for user: {email}");
+        // SECURITY: Non-admin users can ONLY see their own history
+        if (role != "admin" && !string.IsNullOrEmpty(email))
+        {
+            query = query.Where(h => !string.IsNullOrEmpty(h.DriverEmail) && h.DriverEmail.ToLower() == email);
+            Console.WriteLine($"[HISTORY] Filtered for user: {email}");
+        }
+        else if (role == "admin")
+        {
+            Console.WriteLine($"[HISTORY] Admin access - showing all history");
+        }
+        else
+        {
+            // No email provided and not admin - return empty for security
+            Console.WriteLine($"[HISTORY] No email provided - returning empty");
+            return Results.Ok(new List<object>());
+        }
+
+        // Select only needed fields to avoid DateTime issues
+        var rawHistories = await query
+            .OrderByDescending(h => h.Id)
+            .Select(h => new
+            {
+                h.Id,
+                h.RouteId,
+                h.Date,
+                h.StartTime,
+                h.EndTime,
+                h.Origin,
+                h.Destination,
+                h.DriverEmail,
+                h.Weather,
+                h.WeatherCondition,
+                h.Distance,
+                h.Duration,
+                h.Status,
+                h.OriginLat,
+                h.OriginLon,
+                h.DestinationLat,
+                h.DestinationLon,
+                h.CurrentLat,
+                h.CurrentLon,
+                h.Eta,
+                h.Speed,
+                h.Temperature,
+                h.Humidity,
+                h.WindSpeed,
+                h.RainProbability,
+                h.SafetyScore,
+                h.Notes,
+                CreatedAtText = h.CreatedAt.ToString()
+            })
+            .ToListAsync();
+
+        var list = rawHistories.Select(h =>
+        {
+            // Case-insensitive email lookup
+            var user = users.FirstOrDefault(u => u.Email.ToLower() == (h.DriverEmail ?? "").ToLower());
+            return new
+            {
+                h.Id,
+                h.RouteId,
+                h.Date,
+                h.StartTime,
+                h.EndTime,
+                h.Origin,
+                h.Destination,
+                driverName = user?.Name ?? h.DriverEmail ?? "Unknown",
+                h.Weather,
+                h.WeatherCondition,
+                h.Distance,
+                h.Duration,
+                h.Status,
+                h.DriverEmail,
+                h.OriginLat,
+                h.OriginLon,
+                h.DestinationLat,
+                h.DestinationLon,
+                h.CurrentLat,
+                h.CurrentLon,
+                h.Eta,
+                h.Speed,
+                h.Temperature,
+                h.Humidity,
+                h.WindSpeed,
+                h.RainProbability,
+                h.SafetyScore,
+                h.Notes,
+                createdAt = h.CreatedAtText
+            };
+        }).ToList();
+
+        Console.WriteLine($"[HISTORY] Returning {list.Count} records");
+        return Results.Ok(list);
     }
-    else if (role == "admin")
+    catch (Exception ex)
     {
-        Console.WriteLine($"[HISTORY] Admin access - showing all history");
-    }
-    else
-    {
-        // No email provided and not admin - return empty for security
-        Console.WriteLine($"[HISTORY] No email provided - returning empty");
+        Console.WriteLine($"[HISTORY] Error: {ex.Message}");
         return Results.Ok(new List<object>());
     }
-
-    var histories = await query.OrderByDescending(h => h.Id).ToListAsync();
-
-    var list = histories.Select(h =>
-    {
-        // Case-insensitive email lookup
-        var user = users.FirstOrDefault(u => u.Email.ToLower() == (h.DriverEmail ?? "").ToLower());
-        return new
-        {
-            id = h.Id,
-            routeId = h.RouteId,
-            date = h.Date,
-            startTime = h.StartTime,
-            endTime = h.EndTime,
-            origin = h.Origin,
-            destination = h.Destination,
-            driverName = user?.Name ?? h.DriverEmail ?? "Unknown",
-            weather = h.Weather,
-            weatherCondition = h.WeatherCondition,
-            distance = h.Distance,
-            duration = h.Duration,
-            status = h.Status,
-            driverEmail = h.DriverEmail,
-            originLat = h.OriginLat,
-            originLon = h.OriginLon,
-            destinationLat = h.DestinationLat,
-            destinationLon = h.DestinationLon,
-            currentLat = h.CurrentLat,
-            currentLon = h.CurrentLon,
-            eta = h.Eta,
-            speed = h.Speed,
-            temperature = h.Temperature,
-            humidity = h.Humidity,
-            windSpeed = h.WindSpeed,
-            rainProbability = h.RainProbability,
-            safetyScore = h.SafetyScore,
-            notes = h.Notes,
-            createdAt = h.CreatedAt
-        };
-    }).ToList();
-
-    Console.WriteLine($"[HISTORY] Returning {list.Count} records");
-    return Results.Ok(list);
 });
 app.MapPost("/api/history", async (AppDbContext db, SaveDeliveryHistoryRequest req) =>
 {
@@ -815,16 +857,15 @@ app.MapPost("/api/history", async (AppDbContext db, SaveDeliveryHistoryRequest r
         // --- ENFORCE SINGLE ACTIVE NAVIGATION ---
         var activeTrips = await db.Histories
             .Where(h => h.DriverEmail.ToLower() == req.DriverEmail.ToLower() && h.Status.ToLower() == "inprogress")
+            .Select(h => new { h.Id, h.DriverEmail, h.Status })
             .ToListAsync();
-        foreach (var active in activeTrips)
-        {
-            active.Status = "Cancelled";
-            active.Notes = "New navigation started";
-        }
+
+        // Update via raw SQL to avoid DateTime read issues
         if (activeTrips.Count > 0)
         {
+            var ids = string.Join(",", activeTrips.Select(h => h.Id));
+            db.Database.ExecuteSqlRaw($"UPDATE \"Histories\" SET \"Status\" = 'Cancelled', \"Notes\" = 'New navigation started' WHERE \"Id\" IN ({ids})");
             Console.WriteLine($"[HISTORY POST] Cancelled {activeTrips.Count} previous InProgress trips for {req.DriverEmail}");
-            await db.SaveChangesAsync();
         }
 
         // Create new trip with InProgress status
