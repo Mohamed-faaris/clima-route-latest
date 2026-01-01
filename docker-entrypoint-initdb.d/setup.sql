@@ -136,7 +136,7 @@ INSERT INTO
         "Status"
     )
 VALUES (
-        'Admin@dev.com',
+        'admin@gmail.com',
         '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
         'Admin@123',
         'Admin User',
@@ -145,7 +145,7 @@ VALUES (
         'ACTIVE'
     ),
     (
-        'Driver@dev.com',
+        'driver@gmail.com,
         '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
         'Driver@123',
         'Driver User',
