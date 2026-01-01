@@ -1593,182 +1593,54 @@ app.MapGet("/api/fleet/realtime", async (AppDbContext db, HttpRequest req, IHttp
 });
 
 // --- ACTIVE FLEET MONITORING (STRICT: Only InProgress, Auto-Cancel Duplicates) ---
-app.MapGet("/api/fleet/active", async (AppDbContext db, HttpRequest req, IHttpClientFactory clientFactory) =>
+app.MapGet("/api/fleet/active", async (AppDbContext db, HttpRequest req) =>
 {
     var email = req.Query.ContainsKey("email") ? req.Query["email"].ToString().ToLower() : null;
     var role = req.Query.ContainsKey("role") ? req.Query["role"].ToString().ToLower() : "user";
 
-    Console.WriteLine($"[FLEET/ACTIVE] Request - email: {email ?? "null"}, role: {role}");
+    Console.WriteLine($"[FLEET/ACTIVE] Request - email: {email}, role: {role}");
 
-    var http = clientFactory.CreateClient();
-    http.DefaultRequestHeaders.Add("User-Agent", "ClimaRouteApp/1.0");
-
-    // Step 1: Build query for InProgress trips ONLY
-    IQueryable<DeliveryHistory> query = db.Histories
-        .Where(h => h.Status != null && h.Status.ToLower() == "inprogress");
-
-    // SECURITY: Non-admin users can ONLY see their own fleet
-    if (role != "admin" && !string.IsNullOrEmpty(email))
+    // Check if admin
+    if (role == "admin")
     {
-        query = query.Where(h => !string.IsNullOrEmpty(h.DriverEmail) && h.DriverEmail.ToLower() == email);
-        Console.WriteLine($"[FLEET/ACTIVE] Filtered for user: {email}");
-    }
-    else if (role == "admin")
-    {
-        Console.WriteLine($"[FLEET/ACTIVE] Admin access - showing all fleet");
+        // Admin: Show ALL fleet records
+        var allFleet = await db.Histories.ToListAsync();
+        Console.WriteLine($"[FLEET/ACTIVE] Admin access - fetched ALL {allFleet.Count} fleet records");
+        return Results.Ok(allFleet.Select((h, idx) => new
+        {
+            id = h.Id,
+            routeId = h.RouteId,
+            driverEmail = h.DriverEmail,
+            origin = h.Origin,
+            destination = h.Destination,
+            status = h.Status,
+            createdAt = h.CreatedAt,
+            distance = h.Distance,
+            eta = h.Eta
+        }).ToList());
     }
     else
     {
-        Console.WriteLine($"[FLEET/ACTIVE] No email provided - returning empty");
-        return Results.Ok(new List<object>());
-    }
+        // Non-admin: Show only InProgress records
+        var inProgressFleet = await db.Histories
+            .Where(h => h.Status != null && h.Status.ToLower() == "inprogress")
+            .ToListAsync();
 
-    var inProgressTrips = await query.ToListAsync();
+        Console.WriteLine($"[FLEET/ACTIVE] Non-admin access - fetched {inProgressFleet.Count} InProgress records");
 
-    // Step 2: Group by driver and handle duplicates (CRITICAL: only ONE active per driver)
-    var grouped = inProgressTrips
-        .Where(h => !string.IsNullOrEmpty(h.DriverEmail))
-        .GroupBy(h => h.DriverEmail!.ToLower())
-        .ToList();
-
-    var validFleets = new List<DeliveryHistory>();
-    var toCancel = new List<DeliveryHistory>();
-
-    foreach (var group in grouped)
-    {
-        if (group.Count() > 1)
-        {
-            // Multiple InProgress for same driver - keep only the latest
-            var sorted = group.OrderByDescending(h => h.CreatedAt).ThenByDescending(h => h.Id).ToList();
-            validFleets.Add(sorted.First()); // Keep newest
-            toCancel.AddRange(sorted.Skip(1)); // Cancel all older ones
-        }
-        else
-        {
-            validFleets.Add(group.First());
-        }
-    }
-
-    // Step 3: Auto-cancel older duplicates in DB (persist)
-    if (toCancel.Any())
-    {
-        foreach (var trip in toCancel)
-        {
-            trip.Status = "Cancelled";
-        }
-        await db.SaveChangesAsync();
-        Console.WriteLine($"[Fleet Cleanup] Auto-cancelled {toCancel.Count} duplicate InProgress trips");
-    }
-
-    // Step 4: Get user lookup for driver info
-    var userEmails = validFleets.Select(h => h.DriverEmail).Where(e => e != null).Distinct().ToList();
-    var userLookup = await db.Users.Where(u => userEmails.Contains(u.Email)).ToDictionaryAsync(u => u.Email.ToLower(), u => u);
-
-    // Helper: Reverse geocode location name
-    async Task<string> GetLocationName(double lat, double lon)
-    {
-        try
-        {
-            var url = $"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json";
-            var response = await http.GetAsync(url);
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("display_name", out var name))
-                {
-                    var fullName = name.GetString() ?? "";
-                    var parts = fullName.Split(',').Take(3).Select(p => p.Trim());
-                    return string.Join(", ", parts);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Geocode error: {ex.Message}");
-        }
-        return "Location unavailable";
-    }
-
-    // Step 5: Build response with location names (NO raw coordinates in display)
-    var vehicles = new List<object>();
-
-    foreach (var (h, idx) in validFleets.Select((h, idx) => (h, idx)))
-    {
-        var currentLat = h.CurrentLat ?? h.OriginLat ?? 13.0827;
-        var currentLon = h.CurrentLon ?? h.OriginLon ?? 80.2707;
-        var destLat = h.DestinationLat ?? 13.1;
-        var destLon = h.DestinationLon ?? 80.3;
-
-        // Get user info
-        var driverKey = (h.DriverEmail ?? "").ToLower();
-        var user = userLookup.ContainsKey(driverKey) ? userLookup[driverKey] : null;
-
-        // Reverse geocode current location
-        var currentLocationName = await GetLocationName(currentLat, currentLon);
-
-        // Fetch route geometry from OSRM
-        List<double[]>? routeGeometry = null;
-        try
-        {
-            var osrmUrl = $"http://router.project-osrm.org/route/v1/driving/{currentLon},{currentLat};{destLon},{destLat}?overview=full&geometries=geojson";
-            var osrmResponse = await http.GetAsync(osrmUrl);
-            if (osrmResponse.IsSuccessStatusCode)
-            {
-                var osrmData = await osrmResponse.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(osrmData);
-                var routes = doc.RootElement.GetProperty("routes");
-                if (routes.GetArrayLength() > 0)
-                {
-                    var coords = routes[0].GetProperty("geometry").GetProperty("coordinates");
-                    routeGeometry = new List<double[]>();
-                    foreach (var coord in coords.EnumerateArray())
-                    {
-                        var lon = coord[0].GetDouble();
-                        var lat = coord[1].GetDouble();
-                        routeGeometry.Add(new double[] { lat, lon });
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"OSRM Error for vehicle {h.Id}: {ex.Message}");
-        }
-
-        if (routeGeometry == null || routeGeometry.Count == 0)
-        {
-            routeGeometry = new List<double[]> {
-                new double[] { currentLat, currentLon },
-                new double[] { destLat, destLon }
-            };
-        }
-
-        vehicles.Add(new
+        return Results.Ok(inProgressFleet.Select((h, idx) => new
         {
             id = h.Id,
-            vehicleId = user?.VehicleId ?? h.RouteId ?? $"FLT-{1000 + idx}",
+            routeId = h.RouteId,
             driverEmail = h.DriverEmail,
-            driverName = user?.Name ?? h.DriverEmail ?? "Unknown Driver",
-            lat = currentLat,
-            lon = currentLon,
-            originLat = h.OriginLat ?? currentLat,
-            originLon = h.OriginLon ?? currentLon,
-            destLat = destLat,
-            destLon = destLon,
-            status = "InProgress",
-            origin = h.Origin ?? "Unknown",
-            destination = h.Destination ?? "Unknown",
-            distance = h.Distance ?? "N/A",
-            eta = h.Eta ?? "Calculating...",
-            speed = h.Speed ?? 0,
-            currentLocationName = currentLocationName,
-            lastUpdated = h.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-            routeGeometry = routeGeometry
-        });
+            origin = h.Origin,
+            destination = h.Destination,
+            status = h.Status,
+            createdAt = h.CreatedAt,
+            distance = h.Distance,
+            eta = h.Eta
+        }).ToList());
     }
-
-    return Results.Ok(vehicles);
 });
 
 // --- UPDATE VEHICLE LOCATION (for real-time tracking) ---
