@@ -790,10 +790,27 @@ app.MapPost("/api/history", async (AppDbContext db, SaveDeliveryHistoryRequest r
 {
     try
     {
+        // Validate required fields
+        if (string.IsNullOrEmpty(req.DriverEmail))
+            return Results.BadRequest(new { error = "Driver email is required" });
+        if (string.IsNullOrEmpty(req.Date))
+            return Results.BadRequest(new { error = "Date is required" });
+        if (string.IsNullOrEmpty(req.StartTime))
+            return Results.BadRequest(new { error = "Start time is required" });
+        if (string.IsNullOrEmpty(req.Origin))
+            return Results.BadRequest(new { error = "Origin is required" });
+        if (string.IsNullOrEmpty(req.Destination))
+            return Results.BadRequest(new { error = "Destination is required" });
+        if (string.IsNullOrEmpty(req.Distance))
+            return Results.BadRequest(new { error = "Distance is required" });
+
         // Validate user exists before accepting request
-        if (string.IsNullOrEmpty(req.DriverEmail)) return Results.BadRequest("Driver email is required");
-        var userExists = await db.Users.AnyAsync(u => u.Email.ToLower() == req.DriverEmail.ToLower());
-        if (!userExists) return Results.Unauthorized();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == req.DriverEmail.ToLower());
+        if (user == null)
+        {
+            Console.WriteLine($"[HISTORY POST] User not found: {req.DriverEmail}");
+            return Results.BadRequest(new { error = $"Driver user not found: {req.DriverEmail}. Available users: admin@gmail.com, driver@gmail.com" });
+        }
 
         // --- ENFORCE SINGLE ACTIVE NAVIGATION ---
         var activeTrips = await db.Histories
@@ -804,46 +821,54 @@ app.MapPost("/api/history", async (AppDbContext db, SaveDeliveryHistoryRequest r
             active.Status = "Cancelled";
             active.Notes = "New navigation started";
         }
-        if (activeTrips.Count > 0) await db.SaveChangesAsync();
+        if (activeTrips.Count > 0)
+        {
+            Console.WriteLine($"[HISTORY POST] Cancelled {activeTrips.Count} previous InProgress trips for {req.DriverEmail}");
+            await db.SaveChangesAsync();
+        }
 
         // Create new trip with InProgress status
         var trip = new DeliveryHistory
         {
-            RouteId = req.RouteId,
+            RouteId = req.RouteId ?? "",
             Date = req.Date,
             StartTime = req.StartTime,
-            EndTime = req.EndTime,
+            EndTime = req.EndTime ?? "",
             Origin = req.Origin,
             Destination = req.Destination,
             OriginLat = req.OriginLat,
             OriginLon = req.OriginLon,
             DestinationLat = req.DestinationLat,
             DestinationLon = req.DestinationLon,
-            CurrentLat = req.OriginLat,
-            CurrentLon = req.OriginLon,
+            CurrentLat = req.CurrentLat ?? req.OriginLat,
+            CurrentLon = req.CurrentLon ?? req.OriginLon,
             Eta = req.Eta,
             Speed = req.Speed,
-            Weather = req.Weather,
-            WeatherCondition = req.WeatherCondition,
+            Weather = req.Weather ?? "Unknown",
+            WeatherCondition = req.WeatherCondition ?? "Unknown",
             Temperature = req.Temperature,
             Humidity = req.Humidity,
             WindSpeed = req.WindSpeed,
-            RainProbability = req.RainProbability,
-            SafetyScore = req.SafetyScore,
+            RainProbability = req.RainProbability ?? 0,
+            SafetyScore = req.SafetyScore ?? "Safe",
             Distance = req.Distance,
             Duration = req.Duration,
             Status = "InProgress",
             DriverEmail = req.DriverEmail,
-            Notes = req.Notes,
-            CreatedAt = DateTime.Now
+            Notes = req.Notes ?? "",
+            CreatedAt = DateTime.UtcNow
         };
+
         db.Histories.Add(trip);
         await db.SaveChangesAsync();
-        return Results.Ok(new { success = true, tripId = trip.Id });
+
+        Console.WriteLine($"[HISTORY POST] Created new trip ID {trip.Id} for {req.DriverEmail}: {req.Origin} → {req.Destination}");
+        return Results.Ok(new { success = true, tripId = trip.Id, message = "Trip started successfully" });
     }
     catch (Exception ex)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        Console.WriteLine($"[HISTORY POST] Error: {ex.Message}\n{ex.StackTrace}");
+        return Results.BadRequest(new { error = ex.Message, detail = ex.InnerException?.Message });
     }
 });
 
