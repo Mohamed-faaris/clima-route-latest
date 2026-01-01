@@ -39,8 +39,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     const res = await apiService.login(email, password || '');
     // res expected: { token, user: { email, name, role } }
     const u = res.user || res;
-
+    console.log('[Auth] Login response user:', u);
     const userObj: User = { email: u.email, name: u.name, role: u.role?.toLowerCase() === 'admin' ? 'admin' : 'user' };
+    console.log('[Auth] Logged in user:', userObj);
     setUser(userObj);
     setIsAuthenticated(true);
     localStorage.setItem('clima_user', JSON.stringify(userObj));
