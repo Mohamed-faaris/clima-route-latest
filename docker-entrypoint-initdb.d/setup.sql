@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS "UserSettings" (
     "DistanceUnit" TEXT NOT NULL,
     "TimeFormat" TEXT NOT NULL,
     "Language" TEXT NOT NULL,
-    "UpdatedAt" TEXT NOT NULL
+    "UpdatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS "Histories" (
     "WeatherCondition" TEXT NOT NULL,
     "Duration" REAL,
     "Notes" TEXT NOT NULL,
-    "CreatedAt" TEXT NOT NULL
+    "CreatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================
@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS "SosAlerts" (
     "Time" TEXT NOT NULL,
     "IsActive" BOOLEAN NOT NULL,
     "DriverName" TEXT DEFAULT '',
-    "CreatedAt" TEXT DEFAULT '',
-    "ResolvedAt" TEXT
+    "CreatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "ResolvedAt" TIMESTAMP
 );
 
 -- ============================
@@ -98,8 +98,8 @@ CREATE TABLE IF NOT EXISTS "SosRecords" (
     "UserId" INTEGER NOT NULL,
     "Reason" TEXT NOT NULL,
     "Status" TEXT NOT NULL,
-    "CreatedAt" TEXT NOT NULL,
-    "ResolvedAt" TEXT
+    "CreatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "ResolvedAt" TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS ix_sosrecords_userid_status ON "SosRecords" ("UserId", "Status");
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS "Weathers" (
     "WindSpeed" REAL NOT NULL,
     "RainProbability" REAL NOT NULL,
     "SafetyScore" TEXT NOT NULL,
-    "RecordedAt" TEXT NOT NULL,
+    "RecordedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "UserEmail" TEXT DEFAULT ''
 );
 
@@ -145,7 +145,7 @@ VALUES (
         'ACTIVE'
     ),
     (
-        'driver@gmail.com,
+        'driver@gmail.com',
         '96CAE35CE8A9B0244178BF28E4966C2CE1B8385723A96A6B838858CDD6CA0A1E',
         'Driver@123',
         'Driver User',
