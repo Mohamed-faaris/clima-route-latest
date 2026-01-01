@@ -4,6 +4,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+# Accept build arguments
+ARG ASPNETCORE_ENVIRONMENT
+ARG LOG_LEVEL
+ARG ASPNETCORE_LOG_LEVEL
+ENV ASPNETCORE_ENVIRONMENT=$ASPNETCORE_ENVIRONMENT
+ENV LOG_LEVEL=$LOG_LEVEL
+ENV ASPNETCORE_LOG_LEVEL=$ASPNETCORE_LOG_LEVEL
+
 # Copy csproj and restore
 COPY ClimaRouteAPI/ClimaRouteAPI.csproj ./ClimaRouteAPI/
 RUN dotnet restore ./ClimaRouteAPI/ClimaRouteAPI.csproj
@@ -27,7 +35,9 @@ COPY --from=build /app/publish .
 
 # Environment variables (can be overridden by docker-compose)
 ENV ASPNETCORE_URLS=http://+:5000
-ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_ENVIRONMENT=$ASPNETCORE_ENVIRONMENT
+ENV LOG_LEVEL=$LOG_LEVEL
+ENV ASPNETCORE_LOG_LEVEL=$ASPNETCORE_LOG_LEVEL
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

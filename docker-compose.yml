@@ -63,6 +63,8 @@ services:
       dockerfile: Dockerfile
       args:
         - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+        - LOG_LEVEL=${LOG_LEVEL:-Information}
+        - ASPNETCORE_LOG_LEVEL=${ASPNETCORE_LOG_LEVEL:-Warning}
     container_name: climaroute-backend
     restart: always
     ports:
@@ -78,7 +80,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-climaroute}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - ConnectionStrings__DefaultConnection=${DATABASE_URL:-Host=db;Port=5432;Database=climaroute;Username=postgres;Password=postgres}
+      - ConnectionStrings__DefaultConnection=${DATABASE_URL:-}
       - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
       - Logging__LogLevel__Microsoft.AspNetCore=${ASPNETCORE_LOG_LEVEL:-Warning}
       - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_change_in_production}
@@ -107,8 +109,11 @@ services:
       args:
         - VITE_API_URL=${VITE_API_URL:-/api}
         - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+        - REACT_APP_LOG_LEVEL=${REACT_APP_LOG_LEVEL:-ERROR}
     container_name: climaroute-frontend
     restart: always
+    environment:
+      - REACT_APP_LOG_LEVEL=${REACT_APP_LOG_LEVEL:-ERROR}
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:

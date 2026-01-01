@@ -2,10 +2,46 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Text;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. SETUP SERVICES
+
+// Configure Logging with levels
+builder.Logging.ClearProviders();
+
+// Set default log level to Error only
+builder.Logging.SetMinimumLevel(LogLevel.Error);
+
+// Add console logging with custom formatting
+builder.Logging.AddConsole(options =>
+{
+    options.Format = Microsoft.Extensions.Logging.Console.ConsoleLoggerFormat.Systemd;
+});
+
+// Add debug logging in development
+if (builder.Environment.IsDevelopment())
+{
+    builder.Logging.AddDebug();
+}
+
+// Configure log levels for specific categories
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+builder.Logging.AddFilter("ClimaRouteAPI", LogLevel.Information); // Our app logs
+
+// Environment variable to control log level
+var logLevel = builder.Configuration["LOG_LEVEL"] ?? "Error";
+if (Enum.TryParse<LogLevel>(logLevel, true, out var parsedLevel))
+{
+    builder.Logging.SetMinimumLevel(parsedLevel);
+    Console.WriteLine($"📝 Log level set to: {parsedLevel}");
+}
+else
+{
+    Console.WriteLine($"⚠️  Invalid LOG_LEVEL '{logLevel}', using default Error level");
+}
 
 // Database Configuration - PostgreSQL for Production, SQLite for Development
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -68,135 +104,155 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+// Get logger for the application
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
 app.UseRouting();
 app.UseCors("AllowReact");
 
 // 2. DATABASE INIT - ENSURE PERSISTENCE
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Ensure database is created (but don't delete it if it exists)
-    db.Database.EnsureCreated();
+        // Ensure database is created (but don't delete it if it exists)
+        db.Database.EnsureCreated();
 
-    // Add VehicleId column if it doesn't exist (for existing databases)
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN \"VehicleId\" TEXT DEFAULT ''");
-        Console.WriteLine("Added VehicleId column to Users table");
-    }
-    catch
-    {
-        // Column already exists, ignore
-    }
+        // Add VehicleId column if it doesn't exist (for existing databases)
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN \"VehicleId\" TEXT DEFAULT ''");
+            logger.LogInformation("Added VehicleId column to Users table");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to add VehicleId column to Users table");
+        }
 
-    // Add new SosAlert columns if they don't exist
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"DriverName\" TEXT DEFAULT ''");
-        Console.WriteLine("Added DriverName column to SosAlerts table");
-    }
-    catch { }
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"CreatedAt\" TEXT DEFAULT ''");
-        Console.WriteLine("Added CreatedAt column to SosAlerts table");
-    }
-    catch { }
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"ResolvedAt\" TEXT");
-        Console.WriteLine("Added ResolvedAt column to SosAlerts table");
-    }
-    catch { }
+        // Add new SosAlert columns if they don't exist
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"DriverName\" TEXT DEFAULT ''");
+            logger.LogInformation("Added DriverName column to SosAlerts table");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to add DriverName column to SosAlerts table");
+        }
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"CreatedAt\" TEXT DEFAULT ''");
+            logger.LogInformation("Added CreatedAt column to SosAlerts table");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to add CreatedAt column to SosAlerts table");
+        }
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"SosAlerts\" ADD COLUMN \"ResolvedAt\" TEXT");
+            logger.LogInformation("Added ResolvedAt column to SosAlerts table");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to add ResolvedAt column to SosAlerts table");
+        }
 
-    // Add new Notification columns for alert types
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"Type\" TEXT DEFAULT ''");
-        Console.WriteLine("Added Type column to Notifications table");
-    }
-    catch { }
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"Severity\" TEXT DEFAULT ''");
-        Console.WriteLine("Added Severity column to Notifications table");
-    }
-    catch { }
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"UserEmail\" TEXT DEFAULT ''");
-        Console.WriteLine("Added UserEmail column to Notifications table");
-    }
-    catch { }
+        // Add new Notification columns for alert types
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"Type\" TEXT DEFAULT ''");
+            Console.WriteLine("Added Type column to Notifications table");
+        }
+        catch { }
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"Severity\" TEXT DEFAULT ''");
+            Console.WriteLine("Added Severity column to Notifications table");
+        }
+        catch { }
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"Notifications\" ADD COLUMN \"UserEmail\" TEXT DEFAULT ''");
+            Console.WriteLine("Added UserEmail column to Notifications table");
+        }
+        catch { }
 
-    // Add UserEmail column to Weathers table for user-specific weather data
-    try
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"Weathers\" ADD COLUMN \"UserEmail\" TEXT DEFAULT ''");
-        Console.WriteLine("Added UserEmail column to Weathers table");
-    }
-    catch { }
+        // Add UserEmail column to Weathers table for user-specific weather data
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE \"Weathers\" ADD COLUMN \"UserEmail\" TEXT DEFAULT ''");
+            logger.LogInformation("Added UserEmail column to Weathers table");
+        }
+        catch { }
 
-    // Fix old SosAlerts with empty CreatedAt - set to current UTC time
-    try
-    {
-        var now = DateTime.UtcNow.ToString("o"); // ISO 8601 format
-        db.Database.ExecuteSqlRaw($"UPDATE \"SosAlerts\" SET \"CreatedAt\" = '{now}' WHERE \"CreatedAt\" IS NULL OR \"CreatedAt\" = ''");
-        Console.WriteLine("Fixed empty CreatedAt values in SosAlerts table");
+        // Fix old SosAlerts with empty CreatedAt - set to current UTC time
+        try
+        {
+            var now = DateTime.UtcNow.ToString("o"); // ISO 8601 format
+            db.Database.ExecuteSqlRaw($"UPDATE \"SosAlerts\" SET \"CreatedAt\" = '{now}' WHERE \"CreatedAt\" IS NULL OR \"CreatedAt\" = ''");
+            logger.LogInformation("Fixed empty CreatedAt values in SosAlerts table");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not fix CreatedAt values");
+        }
+
+        // Only seed if no users exist to ensure data persistence
+        if (!db.Users.Any())
+        {
+            // Seed fresh users with new credentials
+            var adminPwd = "admin";
+            var driverPwd = "driver";
+
+            var adminUser = new User
+            {
+                Email = "admin@gmail.com",
+                Name = "Administrator",
+                Phone = "+91-9876543210",
+                Password = HashPassword(adminPwd),
+                PlainPassword = adminPwd,
+                Role = "admin",
+                Status = "Active"
+            };
+
+            var driverUser = new User
+            {
+                Email = "driver@gmail.com",
+                Name = "Driver",
+                Phone = "+91-8765432109",
+                Password = HashPassword(driverPwd),
+                PlainPassword = driverPwd,
+                Role = "user",
+                Status = "Active"
+            };
+
+            db.Users.Add(adminUser);
+            db.Users.Add(driverUser);
+            db.SaveChanges();
+
+            logger.LogInformation("===========================================");
+            logger.LogInformation("DATABASE INITIALIZED AND SEEDED!");
+            logger.LogInformation("===========================================");
+            logger.LogInformation("Admin:  admin@gmail.com / admin");
+            logger.LogInformation("Driver: driver@gmail.com / driver");
+            logger.LogInformation("===========================================");
+        }
+        else
+        {
+            logger.LogInformation("===========================================");
+            logger.LogInformation("DATABASE LOADED SUCCESSFULLY!");
+            logger.LogInformation("===========================================");
+        }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Note: Could not fix CreatedAt values: {ex.Message}");
+        logger.LogCritical(ex, "Database initialization failed - application cannot start");
+        throw; // Re-throw to prevent app from starting with broken database
     }
-
-    // Only seed if no users exist to ensure data persistence
-    if (!db.Users.Any())
-    {
-        // Seed fresh users with new credentials
-        var adminPwd = "admin";
-        var driverPwd = "driver";
-
-        var adminUser = new User
-        {
-            Email = "admin@gmail.com",
-            Name = "Administrator",
-            Phone = "+91-9876543210",
-            Password = HashPassword(adminPwd),
-            PlainPassword = adminPwd,
-            Role = "admin",
-            Status = "Active"
-        };
-
-        var driverUser = new User
-        {
-            Email = "driver@gmail.com",
-            Name = "Driver",
-            Phone = "+91-8765432109",
-            Password = HashPassword(driverPwd),
-            PlainPassword = driverPwd,
-            Role = "user",
-            Status = "Active"
-        };
-
-        db.Users.Add(adminUser);
-        db.Users.Add(driverUser);
-        db.SaveChanges();
-
-        Console.WriteLine("===========================================");
-        Console.WriteLine("DATABASE INITIALIZED AND SEEDED!");
-        Console.WriteLine("===========================================");
-        Console.WriteLine("Admin:  admin@gmail.com / admin");
-        Console.WriteLine("Driver: driver@gmail.com / driver");
-        Console.WriteLine("===========================================");
-    }
-    else
-    {
-        Console.WriteLine("===========================================");
-        Console.WriteLine("DATABASE LOADED SUCCESSFULLY!");
-        Console.WriteLine("===========================================");
-    }
-}
+} // Close the using block
 
 // 3. API ENDPOINTS
 
@@ -1883,6 +1939,7 @@ static string HashPassword(string pwd)
     var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(pwd));
     return Convert.ToHexString(bytes);
 }
+
 
 // --- MODELS ---
 class AppDbContext : DbContext
