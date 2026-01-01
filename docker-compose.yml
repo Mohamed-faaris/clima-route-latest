@@ -75,7 +75,12 @@ services:
       - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai-service:5001}
       - HOST_URL=${HOST_URL:-http://localhost:5000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:80,http://localhost}
-      - ConnectionStrings__DefaultConnection=${DATABASE_URL:-Host=${DB_HOST:-db};Port=${DB_PORT:-5432};Database=${POSTGRES_DB:-climaroute};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}}
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-climaroute}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - ConnectionStrings__DefaultConnection=${DATABASE_URL:-Host=db;Port=5432;Database=climaroute;Username=postgres;Password=postgres}
       - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
       - Logging__LogLevel__Microsoft.AspNetCore=${ASPNETCORE_LOG_LEVEL:-Warning}
       - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_change_in_production}
