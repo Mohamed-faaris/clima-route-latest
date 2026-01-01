@@ -67,7 +67,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     {
         // Production: PostgreSQL
         options.UseNpgsql(connectionString);
-        Console.WriteLine("📦 Using PostgreSQL database");
+        // Console.WriteLine("📦 Using PostgreSQL database");
     }
     else
     {
