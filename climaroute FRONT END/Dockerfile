@@ -1,5 +1,5 @@
 # Frontend Build Stage
-FROM oven/bun:1 AS build
+FROM oven/bun:1-alpine AS build
 
 WORKDIR /app
 
