@@ -207,7 +207,14 @@ def segment_weather():
 @app.route('/health', methods=['GET'])
 def health_check():
     """ Health check endpoint """
-    return jsonify({"status": "ok", "message": "AI Server is running"})
+    model_loaded = model is not None and scaler is not None
+    status = "healthy" if model_loaded else "degraded"
+    return jsonify({
+        "status": status,
+        "message": "AI Server is running",
+        "model_loaded": model_loaded,
+        "weather_model_available": model_loaded
+    })
 
 if __name__ == '__main__':
     # Use Waitress for production-ready multi-threaded serving

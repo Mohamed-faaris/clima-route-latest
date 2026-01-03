@@ -327,10 +327,33 @@ app.MapGet("/api/more-health", async (AppDbContext db, IHttpClientFactory client
 
     var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown";
 
+    // Get logger level
+    var loggerLevel = builder.Configuration["Logging:LogLevel:Default"] ?? "Information";
+
+    // Check proxy/frontend health
+    bool proxyOk = false;
+    string proxyStatus = "unknown";
+    long proxyResponseMs = -1;
+    try
+    {
+        var proxyStopwatch = Stopwatch.StartNew();
+        var proxyResponse = await http.GetAsync("http://localhost:80/health"); // Assuming nginx health
+        proxyResponseMs = proxyStopwatch.ElapsedMilliseconds;
+        proxyOk = proxyResponse.IsSuccessStatusCode;
+        proxyStatus = proxyOk ? "healthy" : "unhealthy";
+    }
+    catch
+    {
+        proxyStatus = "unreachable";
+    }
+
     var payload = new
     {
         status = (dbOk && aiOk) ? "healthy" : "degraded",
         timestamp = DateTime.UtcNow,
+        api_url = aiServiceUrl,
+        logger_level = loggerLevel,
+        proxy = new { status = proxyStatus, response_ms = proxyResponseMs },
         database = new { status = dbStatus, response_ms = dbResponseMs },
         ai_service = new { status = aiStatus, response_ms = aiResponseMs },
         metrics = new
