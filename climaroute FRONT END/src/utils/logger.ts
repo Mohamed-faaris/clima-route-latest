@@ -12,8 +12,19 @@ class Logger {
     private currentLevel: LogLevel;
 
     constructor() {
-        // Get log level from environment or default to ERROR
-        const envLevel = process.env.REACT_APP_LOG_LEVEL || 'ERROR';
+        // Determine log level: explicit `REACT_APP_LOG_LEVEL` wins.
+        // Otherwise, use `INFO` in development and `ERROR` in production. Default to `INFO`.
+        const explicitLevel = process.env.REACT_APP_LOG_LEVEL;
+        const nodeEnv = process.env.NODE_ENV;
+        let envLevel = explicitLevel;
+        if (!envLevel) {
+            if (nodeEnv === 'production') {
+                envLevel = 'ERROR';
+            } else {
+                envLevel = 'INFO';
+            }
+        }
+        console.log('Log level set to:', envLevel);
         this.currentLevel = LogLevel[envLevel as keyof typeof LogLevel] ?? LogLevel.INFO;
     }
 

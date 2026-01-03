@@ -6,23 +6,37 @@ import logger from '../src/utils/logger';
 const getApiUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
+  logger.debug('[getApiUrl] entry', { envUrl });
+
   // If running in browser and VITE_API_URL is a full external URL with different host,
   // use it as-is. Otherwise, use relative path for Nginx proxy.
   if (envUrl) {
     try {
       const envUrlObj = new URL(envUrl);
       const currentHost = window.location.hostname;
+      logger.debug('[getApiUrl] parsed env URL', { href: envUrlObj.href, hostname: envUrlObj.hostname, currentHost });
+
       // If the API URL hostname is different from current host, use full URL
       if (envUrlObj.hostname !== currentHost && envUrlObj.hostname !== 'localhost' && envUrlObj.hostname !== '127.0.0.1') {
+        logger.info('[getApiUrl] using external API URL', { apiUrl: envUrl });
         return envUrl;
       }
+
+      logger.debug('[getApiUrl] env URL hostname matches current host or is localhost; will use relative path');
     } catch (e) {
       // If it's not a valid URL, it might be a relative path
-      if (envUrl.startsWith('/')) return envUrl;
+      logger.warn('[getApiUrl] VITE_API_URL is not an absolute URL; treating as relative', { envUrl, error: (e as Error).message });
+      if (envUrl.startsWith('/')) {
+        logger.info('[getApiUrl] using relative VITE_API_URL', { apiPath: envUrl });
+        return envUrl;
+      }
     }
+  } else {
+    logger.debug('[getApiUrl] VITE_API_URL not provided; falling back to default');
   }
 
   // Default: use relative path for Nginx proxy
+  logger.info('[getApiUrl] defaulting to /api (Nginx proxy)');
   return '/api';
 };
 
