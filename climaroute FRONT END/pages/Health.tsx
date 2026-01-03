@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../components/Layout';
 import { apiService } from '../services/apiservice';
+import { logger, LogLevel } from '../src/utils/logger';
 import { 
   Activity, 
   Database, 
@@ -19,6 +20,25 @@ import {
 const Health = () => {
   const [healthData, setHealthData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Get frontend values
+  const getApiUrl = (): string => {
+    const envUrl = import.meta.env.VITE_API_URL;
+    if (envUrl) {
+      try {
+        const url = new URL(envUrl, window.location.origin);
+        if (url.host !== window.location.host) {
+          return envUrl;
+        }
+      } catch (e) {
+        // Invalid URL, fall back to relative
+      }
+    }
+    return '/api';
+  };
+
+  const frontendApiUrl = getApiUrl();
+  const frontendLoggerLevel = LogLevel[logger.getLevel()] || 'INFO';
 
   useEffect(() => {
     const fetchHealthData = async () => {
@@ -109,7 +129,7 @@ const Health = () => {
     );
   }
 
-  const { status, api_url, logger_level, proxy, database, ai_service, metrics } = healthData;
+  const { status, proxy, database, ai_service, metrics } = healthData;
   console.log('Health Data:', healthData);
 
   return (
@@ -143,9 +163,9 @@ const Health = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Server className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-medium">AI Service URL</span>
+              <span className="text-sm font-medium">Frontend API URL</span>
             </div>
-            <p className="text-xs font-mono bg-gray-50 p-2 rounded">{api_url}</p>
+            <p className="text-xs font-mono bg-gray-50 p-2 rounded">{frontendApiUrl}</p>
           </div>
         </Card>
 
@@ -153,9 +173,9 @@ const Health = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Settings className="w-4 h-4 text-purple-500" />
-              <span className="text-sm font-medium">Logger Level</span>
+              <span className="text-sm font-medium">Frontend Logger Level</span>
             </div>
-            <p className="text-sm font-semibold text-purple-600">{logger_level}</p>
+            <p className="text-sm font-semibold text-purple-600">{frontendLoggerLevel}</p>
           </div>
         </Card>
 
