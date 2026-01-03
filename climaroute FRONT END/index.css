@@ -1,0 +1,10 @@
+/* Minimal site CSS to avoid MIME error; extend as needed */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: Inter, sans-serif;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e0e7ff 50%, #f3e8ff 100%);
+}
