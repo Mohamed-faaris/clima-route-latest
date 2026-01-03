@@ -28,6 +28,35 @@ class Logger {
         this.currentLevel = LogLevel[envLevel as keyof typeof LogLevel] ?? LogLevel.INFO;
     }
 
+    // Return current numeric log level
+    getLevel(): LogLevel {
+        return this.currentLevel;
+    }
+
+    // Set log level at runtime. Accepts either a LogLevel or a string name (case-insensitive).
+    setLevel(level: LogLevel | string): void {
+        if (typeof level === 'number') {
+            this.currentLevel = level;
+            this.info('Log level changed', { level: LogLevel[level] });
+            return;
+        }
+        const parsed = this.parseLevel(level as string);
+        if (parsed !== undefined) {
+            this.currentLevel = parsed;
+            this.info('Log level changed', { level: level.toUpperCase() });
+        } else {
+            this.warn('Attempted to set unknown log level', { input: level });
+        }
+    }
+
+    private parseLevel(level: string): LogLevel | undefined {
+        const key = level.trim().toUpperCase();
+        if ((LogLevel as any)[key] !== undefined) {
+            return (LogLevel as any)[key] as LogLevel;
+        }
+        return undefined;
+    }
+
     private shouldLog(level: LogLevel): boolean {
         return level >= this.currentLevel;
     }
@@ -108,5 +137,30 @@ window.addEventListener('unhandledrejection', (event) => {
         type: 'unhandledrejection'
     });
 });
+
+// Expose runtime log-level API on `window` for debugging and runtime control.
+declare global {
+    interface Window {
+        setLogLevel?: (level: string | LogLevel) => void;
+        getLogLevel?: () => string;
+        __logger?: Logger;
+    }
+}
+
+window.setLogLevel = (level: string | LogLevel) => {
+    try {
+        logger.setLevel(level);
+    } catch (e) {
+        console.warn('setLogLevel failed', e);
+    }
+};
+
+window.getLogLevel = () => {
+    const lv = logger.getLevel();
+    return LogLevel[lv] ?? String(lv);
+};
+
+// Provide direct access for advanced debugging
+window.__logger = logger;
 
 export default logger;
