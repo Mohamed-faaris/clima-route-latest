@@ -12,10 +12,10 @@ class Logger {
     private currentLevel: LogLevel;
 
     constructor() {
-        // Determine log level: explicit `REACT_APP_LOG_LEVEL` wins.
-        // Otherwise, use `INFO` in development and `ERROR` in production. Default to `INFO`.
-        const explicitLevel = process.env.REACT_APP_LOG_LEVEL;
-        const nodeEnv = process.env.NODE_ENV;
+        // Determine log level: prefer Vite `VITE_LOG_LEVEL` via `import.meta.env`.
+        // Fallback: `INFO` for development, `ERROR` for production.
+        const explicitLevel = (import.meta.env as any)?.VITE_LOG_LEVEL as string | undefined;
+        const nodeEnv = (import.meta.env as any)?.MODE || process.env.NODE_ENV;
         let envLevel = explicitLevel;
         if (!envLevel) {
             if (nodeEnv === 'production') {

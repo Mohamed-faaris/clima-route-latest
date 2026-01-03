@@ -3,6 +3,17 @@
 import logger from '../src/utils/logger';
 
 // Determine API URL - prioritize relative path for Docker/Nginx deployment
+//
+// VITE_API_URL examples:
+// - Relative (recommended for Nginx proxy): "/api"
+// - Local backend during development: "http://localhost:5000/api"
+// - Remote / hosted API: "https://api.example.com/api"
+//
+// Behavior:
+// - If `VITE_API_URL` is provided and points to a different host than the current
+//   location, the code will return it as an absolute URL.
+// - Otherwise (or when not provided) we default to a relative "/api" path so
+//   the frontend can be proxied to the API by Nginx/docker-compose.
 const getApiUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
