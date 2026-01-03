@@ -20,6 +20,7 @@ import { ETACalculator } from './pages/ETAcalc';
 import { RestPoint } from './pages/RestPoint';
 import { SOS } from './pages/Sos';    
 import Settings from './pages/Settings';
+import Health from './pages/Health';
 
 
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -45,6 +46,7 @@ export default function App() {
           {/* Public / Auth Routes */}
           <Route path="/" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/health" element={<Health />} />
           
           {/* Driver App Routes */}
           <Route element={<Layout><OutletWrapper /></Layout>}>
