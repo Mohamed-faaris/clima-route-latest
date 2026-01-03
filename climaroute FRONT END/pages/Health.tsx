@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../components/Layout';
+import { apiService } from '../services/apiservice';
 import { 
   Activity, 
   Database, 
@@ -20,15 +21,16 @@ const Health = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/more-health')
-      .then(res => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch health data');
-        }
-        return res.json();
-      })
-      .then(data => setHealthData(data))
-      .catch(err => setError(err.message));
+    const fetchHealthData = async () => {
+      try {
+        const data = await apiService.get('/more-health');
+        setHealthData(data);
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+    
+    fetchHealthData();
   }, []);
 
   const getStatusIcon = (status: string) => {
