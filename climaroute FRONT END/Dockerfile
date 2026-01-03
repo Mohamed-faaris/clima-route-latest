@@ -1,5 +1,5 @@
 # Frontend Build Stage
-FROM node:20-alpine AS build
+FROM oven/bun:1 AS build
 
 WORKDIR /app
 
@@ -12,16 +12,16 @@ ENV GEMINI_API_KEY=$GEMINI_API_KEY
 ENV REACT_APP_LOG_LEVEL=$REACT_APP_LOG_LEVEL
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package.json bun.lockb* ./
 
 # Install dependencies
-RUN npm ci
+RUN bun install
 
 # Copy source code
 COPY . .
 
 # Build for production
-RUN npm run build
+RUN bun run build
 
 # Production stage with Nginx
 FROM nginx:alpine
