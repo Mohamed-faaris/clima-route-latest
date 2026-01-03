@@ -24,6 +24,7 @@ const getApiUrl = (): string => {
   if (envUrl) {
     try {
       const envUrlObj = new URL(envUrl);
+      if(envUrlObj) return envUrl;
       const currentHost = window.location.hostname;
       logger.debug('[getApiUrl] parsed env URL', { href: envUrlObj.href, hostname: envUrlObj.hostname, currentHost });
 
