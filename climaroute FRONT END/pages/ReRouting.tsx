@@ -8,6 +8,7 @@ import { useSos } from '../contexts/SosContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import logger from '@/src/utils/logger';
 
 // Fix Icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -404,6 +405,9 @@ export function ReRouting() {
               const selectedRoute = data.alternatives[bestIndex];
               const totalDistanceKm = selectedRoute.distance / 1000;
               const segments = await createRouteSegments(selectedRoute.geometry, totalDistanceKm);
+
+              logger.debug("setting route segments for adaptive speed:", segments);
+
               
               // Update sessionStorage with new route segments
               sessionStorage.setItem('climaRoute_routeSegments', JSON.stringify({
@@ -633,6 +637,8 @@ export function ReRouting() {
           // Create 5-segment route data for AdaptiveSpeed page
           const totalDistanceKm = route.distance / 1000;
           const segments = await createRouteSegments(route.geometry, totalDistanceKm);
+
+          logger.debug("setting route segments for adaptive speed:", segments);
           
           // Store segments in sessionStorage for AdaptiveSpeed page
           sessionStorage.setItem('climaRoute_routeSegments', JSON.stringify({
@@ -941,6 +947,8 @@ export function ReRouting() {
       sessionStorage.removeItem('climaRoute_liveSpeed');
       sessionStorage.removeItem('climaRoute_eta');
       sessionStorage.removeItem('climaRoute_routeSegments');
+      
+      console.log('[CompleteAndSave] ✅ Local state cleared successfully');
 
       // Show success message
       alert('✅ Journey completed and saved successfully!');
