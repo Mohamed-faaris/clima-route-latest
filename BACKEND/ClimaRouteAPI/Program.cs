@@ -293,12 +293,27 @@ app.MapGet("/api/more-health", async (AppDbContext db, IHttpClientFactory client
     bool aiOk = false;
     string aiStatus = "unknown";
     long aiResponseMs = -1;
+    bool modelLoaded = false;
     try
     {
         var aiStopwatch = Stopwatch.StartNew();
         var aiResponse = await http.GetAsync($"{aiServiceUrl}/health");
         aiResponseMs = aiStopwatch.ElapsedMilliseconds;
         aiOk = aiResponse.IsSuccessStatusCode;
+        if (aiOk)
+        {
+            try
+            {
+                var aiHealthData = await aiResponse.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+                modelLoaded = aiHealthData?.ContainsKey("model_loaded") == true &&
+                             aiHealthData["model_loaded"]?.ToString()?.ToLower() == "true";
+            }
+            catch
+            {
+                // If can't parse, assume model is loaded if service is up
+                modelLoaded = true;
+            }
+        }
         aiStatus = aiOk ? "connected" : "unavailable";
     }
     catch (Exception ex)
@@ -355,7 +370,7 @@ app.MapGet("/api/more-health", async (AppDbContext db, IHttpClientFactory client
         logger_level = loggerLevel,
         proxy = new { status = proxyStatus, response_ms = proxyResponseMs },
         database = new { status = dbStatus, response_ms = dbResponseMs },
-        ai_service = new { status = aiStatus, response_ms = aiResponseMs },
+        ai_service = new { status = aiStatus, response_ms = aiResponseMs, model_loaded = modelLoaded },
         metrics = new
         {
             managed_memory_bytes = managedMemoryBytes,

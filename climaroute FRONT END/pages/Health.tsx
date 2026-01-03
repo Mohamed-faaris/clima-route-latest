@@ -213,7 +213,7 @@ const Health = () => {
         </Card>
       </div>
 
-      {/* Weather Model Status - assuming it's part of AI service response */}
+      {/* Weather Model Status */}
       <Card title="Weather Model" className="border border-gray-200">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -221,10 +221,10 @@ const Health = () => {
             <span className="font-medium">Rainfall Prediction Model</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="font-semibold text-cyan-600">
-              {ai_service?.status === 'connected' ? 'Loaded' : 'Not Available'}
+            <span className={`font-semibold ${ai_service?.model_loaded ? 'text-green-600' : 'text-red-600'}`}>
+              {ai_service?.model_loaded ? 'Loaded' : 'Not Available'}
             </span>
-            {getStatusIcon(ai_service?.status === 'connected' ? 'healthy' : 'unhealthy')}
+            {getStatusIcon(ai_service?.model_loaded ? 'healthy' : 'unhealthy')}
           </div>
         </div>
       </Card>
