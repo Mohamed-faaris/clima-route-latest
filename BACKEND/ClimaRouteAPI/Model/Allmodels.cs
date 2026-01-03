@@ -15,10 +15,10 @@ namespace ClimaRouteAPI.Models
         public DateTime? UpdatedAt { get; set; } // Last update timestamp
     }
 
-    public class LoginRequest 
-    { 
-        public required string Email { get; set; } 
-        public required string Password { get; set; } 
+    public class LoginRequest
+    {
+        public required string Email { get; set; }
+        public required string Password { get; set; }
     }
 
     // 2. ADMIN DASHBOARD (For AdminDashboard.tsx)
@@ -28,12 +28,12 @@ namespace ClimaRouteAPI.Models
         public int ActiveAlerts { get; set; }
         public int TotalDrivers { get; set; }
         public required string SystemHealth { get; set; }
-        public List<ChartData> WeeklyVolume { get; set; }
+        public required List<ChartData> WeeklyVolume { get; set; }
     }
-    public class ChartData 
-    { 
-        public required string Name { get; set; } 
-        public int Trips { get; set; } 
+    public class ChartData
+    {
+        public required string Name { get; set; }
+        public int Trips { get; set; }
     }
 
     // 3. FLEET & MAPS (For FleetLiveMonitor.tsx)
@@ -75,7 +75,7 @@ namespace ClimaRouteAPI.Models
         public required string Type { get; set; }
         public required string Distance { get; set; }
         public required string SafetyRating { get; set; }
-        public List<string> Facilities { get; set; }
+        public required List<string> Facilities { get; set; }
     }
 
     // 6. OPERATIONS (For AdaptiveSpeed.tsx)
