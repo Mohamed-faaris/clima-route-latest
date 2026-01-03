@@ -198,7 +198,7 @@ const Health = () => {
       </div>
 
       {/* Service Health Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card title="Database" className="border border-gray-200">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -234,23 +234,22 @@ const Health = () => {
             {getStatusIcon(ai_service?.status)}
           </div>
         </Card>
-      </div>
 
-      {/* Weather Model Status */}
-      <Card title="Weather Model" className="border border-gray-200">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Cloud className="w-5 h-5 text-cyan-500" />
-            <span className="font-medium">Rainfall Prediction Model</span>
+        <Card title="Weather Model" className="border border-gray-200">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Cloud className="w-5 h-5 text-cyan-500" />
+              <span className="font-medium">Rainfall Prediction Model</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className={`font-semibold ${ai_service?.model_loaded ? 'text-green-600' : 'text-red-600'}`}>
+                {ai_service?.model_loaded ? 'Loaded' : 'Not Available'}
+              </span>
+              {getStatusIcon(ai_service?.model_loaded ? 'healthy' : 'unhealthy')}
+            </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className={`font-semibold ${ai_service?.model_loaded ? 'text-green-600' : 'text-red-600'}`}>
-              {ai_service?.model_loaded ? 'Loaded' : 'Not Available'}
-            </span>
-            {getStatusIcon(ai_service?.model_loaded ? 'healthy' : 'unhealthy')}
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       {/* System Metrics */}
       <Card title="System Metrics" className="border border-gray-200">
