@@ -110,6 +110,7 @@ const Health = () => {
   }
 
   const { status, api_url, logger_level, proxy, database, ai_service, metrics } = healthData;
+  console.log('Health Data:', healthData);
 
   return (
     <div className="p-6 space-y-6">
