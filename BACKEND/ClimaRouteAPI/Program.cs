@@ -352,7 +352,7 @@ app.MapGet("/api/more-health", async (AppDbContext db, IHttpClientFactory client
     try
     {
         var proxyStopwatch = Stopwatch.StartNew();
-        var proxyResponse = await http.GetAsync("http://localhost:80/health"); // Assuming nginx health
+        var proxyResponse = await http.GetAsync("http://frontend:80/health"); // Use Docker service name
         proxyResponseMs = proxyStopwatch.ElapsedMilliseconds;
         proxyOk = proxyResponse.IsSuccessStatusCode;
         proxyStatus = proxyOk ? "healthy" : "unhealthy";
