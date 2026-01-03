@@ -265,30 +265,57 @@ app.MapMethods("/api", new[] { "GET", "POST", "PUT", "DELETE", "OPTIONS" }, () =
 }));
 
 // --- HEALTH CHECK (Required for Docker/Kubernetes) ---
-app.MapGet("/health", async (AppDbContext db) =>
+app.MapGet("/health", async (AppDbContext db, IHttpClientFactory clientFactory) =>
 {
+    bool dbOk = true;
+    string dbStatus = "connected";
     try
     {
         // Check database connectivity with a simple query
         await db.Database.ExecuteSqlRawAsync("SELECT 1");
+    }
+    catch (Exception ex)
+    {
+        dbOk = false;
+        dbStatus = "disconnected";
+        logger.LogError(ex, "Database health check failed");
+    }
+
+    // Check AI service health
+    var http = clientFactory.CreateClient();
+    string aiStatus = "unknown";
+    bool aiOk = false;
+    try
+    {
+        var aiResponse = await http.GetAsync($"{aiServiceUrl}/health");
+        aiOk = aiResponse.IsSuccessStatusCode;
+        aiStatus = aiOk ? "connected" : "unavailable";
+    }
+    catch (Exception ex)
+    {
+        aiOk = false;
+        aiStatus = "unreachable";
+        logger.LogWarning(ex, "AI service health check failed");
+    }
+
+    if (dbOk && aiOk)
+    {
         return Results.Ok(new
         {
             status = "healthy",
             timestamp = DateTime.UtcNow,
-            database = "connected"
+            database = dbStatus,
+            ai_service = aiStatus
         });
     }
-    catch (Exception ex)
+
+    return Results.Json(new
     {
-        logger.LogError(ex, "Database health check failed");
-        return Results.Json(new
-        {
-            status = "unhealthy",
-            timestamp = DateTime.UtcNow,
-            database = "disconnected",
-            error = ex.Message
-        }, statusCode: 503);
-    }
+        status = "unhealthy",
+        timestamp = DateTime.UtcNow,
+        database = dbStatus,
+        ai_service = aiStatus
+    }, statusCode: 503);
 });
 
 app.MapGet("/api/health", async (AppDbContext db) =>
