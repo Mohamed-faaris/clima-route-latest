@@ -23,6 +23,91 @@ builder.Logging.AddConsole(options =>
     options.Format = Microsoft.Extensions.Logging.Console.ConsoleLoggerFormat.Systemd;
 });
 
+// Also expose the same detailed health information at /api/more-health
+app.MapGet("/api/more-health", async (AppDbContext db, IHttpClientFactory clientFactory) =>
+{
+    // Measure DB response time
+    var dbStopwatch = Stopwatch.StartNew();
+    bool dbOk = true;
+    string dbStatus = "connected";
+    long dbResponseMs = -1;
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT 1");
+        dbResponseMs = dbStopwatch.ElapsedMilliseconds;
+    }
+    catch (Exception ex)
+    {
+        dbOk = false;
+        dbStatus = "disconnected";
+        dbResponseMs = dbStopwatch.ElapsedMilliseconds;
+        logger.LogError(ex, "Database health check failed");
+    }
+
+    // Check AI service health and measure latency
+    var http = clientFactory.CreateClient();
+    bool aiOk = false;
+    string aiStatus = "unknown";
+    long aiResponseMs = -1;
+    try
+    {
+        var aiStopwatch = Stopwatch.StartNew();
+        var aiResponse = await http.GetAsync($"{aiServiceUrl}/health");
+        aiResponseMs = aiStopwatch.ElapsedMilliseconds;
+        aiOk = aiResponse.IsSuccessStatusCode;
+        aiStatus = aiOk ? "connected" : "unavailable";
+    }
+    catch (Exception ex)
+    {
+        aiOk = false;
+        aiStatus = "unreachable";
+        logger.LogWarning(ex, "AI service health check failed");
+    }
+
+    // Process and system metrics
+    var process = Process.GetCurrentProcess();
+    long managedMemoryBytes = GC.GetTotalMemory(false);
+    long workingSetBytes = process.WorkingSet64;
+    int cpuCount = Environment.ProcessorCount;
+    var startTime = process.StartTime.ToUniversalTime();
+    var uptime = DateTime.UtcNow - startTime;
+
+    long diskFreeBytes = -1;
+    try
+    {
+        var root = Path.GetPathRoot(AppContext.BaseDirectory) ?? "/";
+        var drive = new DriveInfo(root);
+        diskFreeBytes = drive.AvailableFreeSpace;
+    }
+    catch { }
+
+    var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown";
+
+    var payload = new
+    {
+        status = (dbOk && aiOk) ? "healthy" : "degraded",
+        timestamp = DateTime.UtcNow,
+        database = new { status = dbStatus, response_ms = dbResponseMs },
+        ai_service = new { status = aiStatus, response_ms = aiResponseMs },
+        metrics = new
+        {
+            managed_memory_bytes = managedMemoryBytes,
+            process_working_set_bytes = workingSetBytes,
+            cpu_count = cpuCount,
+            uptime_seconds = (long)uptime.TotalSeconds,
+            disk_free_bytes = diskFreeBytes,
+            version = version
+        }
+    };
+
+    if (dbOk && aiOk)
+    {
+        return Results.Ok(payload);
+    }
+
+    return Results.Json(payload, statusCode: 503);
+});
+
 // Add debug logging in development
 if (builder.Environment.IsDevelopment())
 {
